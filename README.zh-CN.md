@@ -1,5 +1,7 @@
 # rust-tree
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 一个用 Rust 编写的快速目录树可视化工具。它能够以多种格式显示目录结构，并提供关于文件分布的全面统计信息。
 
 ## 功能特性

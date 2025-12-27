@@ -1,5 +1,7 @@
 # rust-tree
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 A fast directory tree visualization tool written in Rust. It displays directory structures in multiple formats and provides comprehensive statistics about file distribution.
 
 ## Features
