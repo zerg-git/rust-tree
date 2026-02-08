@@ -23,6 +23,10 @@ A fast directory tree visualization tool written in Rust. It displays directory 
   - Show hidden files
   - Display file sizes
   - Follow symbolic links
+  - **Color support** for better readability
+  - **Exclude patterns** for filtering files
+  - **Progress indication** for large directories
+  - **Streaming mode** for memory-efficient scanning
 
 ## Installation
 
@@ -70,6 +74,55 @@ rust-tree -f json
 rust-tree -f table -S
 ```
 
+### Color Support
+
+```bash
+# Always use colors
+rust-tree --color=always
+
+# Never use colors (useful for piping to files)
+rust-tree --color=never
+
+# Auto-detect terminal support (default)
+rust-tree --color=auto
+
+# Use extended color scheme with more file type colors
+rust-tree --color-scheme=extended
+```
+
+### Filtering
+
+```bash
+# Exclude files matching a pattern
+rust-tree --exclude "*.log"
+
+# Exclude multiple patterns
+rust-tree -e "*.log" -e "node_modules" -e ".git"
+
+# Include only files matching a pattern
+rust-tree --include-only "*.rs"
+
+# Use common exclude patterns for specific languages
+rust-tree --exclude-common=rust      # Rust projects
+rust-tree --exclude-common=python    # Python projects
+rust-tree --exclude-common=nodejs    # Node.js projects
+rust-tree --exclude-common=common    # Common development files
+```
+
+### Progress Indication
+
+```bash
+# Show progress bar during scanning
+rust-tree --progress
+```
+
+### Streaming Mode
+
+```bash
+# Use streaming mode for low memory usage on large directories
+rust-tree --streaming
+```
+
 ### Display Options
 
 ```bash
@@ -89,17 +142,26 @@ rust-tree -o type
 ### Examples
 
 ```bash
-# Display tree with sizes and statistics
-rust-tree -s -S
+# Display tree with colors and sizes
+rust-tree --color=always -s
+
+# Scan with progress indication for large directories
+rust-tree --progress /large/directory
+
+# Exclude build artifacts and dependencies
+rust-tree --exclude-common=rust --exclude "*.rlib"
+
+# Memory-efficient scanning with streaming
+rust-tree --streaming -d 5 /very/large/directory
 
 # JSON output with full statistics
 rust-tree -f json -S > stats.json
 
-# Show only 3 levels deep, sorted by size
-rust-tree -d 3 -o size -r
+# Show only Rust source files
+rust-tree --include-only "*.rs"
 
-# Table format showing all files including hidden
-rust-tree -f table -a -S
+# Colored tree with statistics
+rust-tree --color-scheme=extended -s -S
 ```
 
 ## Command-Line Options
@@ -115,6 +177,13 @@ rust-tree -f table -a -S
 | `-S, --stats` | Show statistics summary | false |
 | `-L, --follow` | Follow symbolic links | false |
 | `--top-files <N>` | Number of largest files to show | 10 |
+| `--color <WHEN>` | Color mode (always/never/auto) | auto |
+| `--color-scheme <SCHEME>` | Color scheme (none/basic/extended) | basic |
+| `-p, --progress` | Show progress bar | false |
+| `-e, --exclude <PATTERN>` | Exclude files matching pattern | - |
+| `--include-only <PATTERN>` | Include only files matching pattern | - |
+| `--exclude-common <LANGUAGE>` | Use common exclude patterns | - |
+| `--streaming` | Use streaming mode for low memory | false |
 | `-h, --help` | Print help | - |
 | `-V, --version` | Print version | - |
 
@@ -186,15 +255,19 @@ rust-tree/
 ├── src/
 │   ├── main.rs          # CLI entry point
 │   ├── lib.rs           # Library interface
-│   ├── config.rs        # Configuration
+│   ├── config.rs        # Configuration & CLI parsing
 │   ├── core/            # Core functionality
 │   │   ├── models.rs    # Data structures
 │   │   ├── walker.rs    # Directory traversal
-│   │   └── collector.rs # Statistics collection
+│   │   ├── collector.rs # Statistics collection
+│   │   ├── filter.rs    # Pattern filtering
+│   │   ├── progress.rs  # Progress indication
+│   │   └── streaming.rs # Memory-efficient streaming
 │   └── formatters/      # Output formatters
 │       ├── tree.rs      # Tree format
 │       ├── json.rs      # JSON format
-│       └── table.rs     # Table format
+│       ├── table.rs     # Table format
+│       └── streaming_tree.rs # Streaming tree format
 ├── docs/                # Documentation
 └── tests/               # Tests
 ```

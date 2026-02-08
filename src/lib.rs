@@ -22,7 +22,7 @@ pub mod core;
 pub mod formatters;
 
 // Re-export commonly used types
-pub use config::{Config, OutputFormat, SortBy};
+pub use config::{Config, OutputFormat, SortBy, ColorMode, ColorScheme};
 pub use core::{
     models::{FsNode, FsTree, FsNodeType, TreeStats, FileTypeInfo, FileEntry, TreeError},
     walker::{walk_directory, WalkConfig, SortField},
@@ -32,6 +32,8 @@ pub use formatters::{format_tree, format_json, format_table};
 
 use std::io::{self, Write};
 use std::time::Instant;
+use crate::core::progress::{create_progress_bar, finish_progress, update_progress, ProgressConfig};
+use crate::core::streaming::StreamConfig;
 
 /// Run the rust-tree tool with the given configuration.
 ///
@@ -46,8 +48,23 @@ use std::time::Instant;
 pub fn run(config: Config) -> Result<(), TreeError> {
     let start_time = Instant::now();
 
+    // Check if streaming mode is enabled
+    if config.streaming {
+        return run_streaming(config);
+    }
+
+    // Traditional mode
+    // Create progress bar if requested
+    let progress_config = ProgressConfig {
+        enabled: config.show_progress,
+        ..Default::default()
+    };
+    let progress = create_progress_bar(&progress_config);
+
     // Walk the directory
+    update_progress(&progress, &format!("Scanning: {}", config.path.display()));
     let tree = walk_directory(&config.path, &config.to_walk_config())?;
+    finish_progress(&progress, "Scan complete");
 
     // Collect statistics
     let stats = collect_stats(&tree, start_time);
@@ -55,7 +72,12 @@ pub fn run(config: Config) -> Result<(), TreeError> {
     // Format output based on selected format
     let output = match config.format {
         OutputFormat::Tree => {
-            let mut result = format_tree(&tree.root, config.show_size);
+            let mut result = format_tree(
+                &tree.root,
+                config.show_size,
+                config.color_mode,
+                config.color_scheme,
+            );
 
             // Add statistics if requested
             if config.show_stats {
@@ -81,6 +103,37 @@ pub fn run(config: Config) -> Result<(), TreeError> {
     Ok(())
 }
 
+/// Run in streaming mode (low memory usage).
+fn run_streaming(config: Config) -> Result<(), TreeError> {
+    use crate::formatters::streaming_tree::format_tree_streaming;
+
+    // Build streaming config
+    let stream_config = StreamConfig {
+        max_depth: config.max_depth,
+        show_hidden: config.show_hidden,
+        follow_symlinks: config.follow_symlinks,
+        sort_by: config.sort_by.into(),
+        reverse: config.reverse,
+        filter: config.to_walk_config().filter,
+    };
+
+    // Use stdout directly for streaming
+    let mut stdout = io::stdout().lock();
+
+    format_tree_streaming(
+        &config.path,
+        &mut stdout,
+        config.show_size,
+        config.color_mode,
+        config.color_scheme,
+        stream_config,
+    ).map_err(|e| TreeError::Other(e.to_string()))?;
+
+    io::stdout().flush().map_err(|e| TreeError::Other(e.to_string()))?;
+
+    Ok(())
+}
+
 /// Default implementation for creating a basic Config.
 impl Default for Config {
     fn default() -> Self {
@@ -95,6 +148,13 @@ impl Default for Config {
             show_stats: false,
             follow_symlinks: false,
             top_files: 10,
+            color_mode: config::ColorMode::Auto,
+            color_scheme: config::ColorScheme::Basic,
+            show_progress: false,
+            exclude: Vec::new(),
+            include_only: None,
+            exclude_common: None,
+            streaming: false,
         }
     }
 }

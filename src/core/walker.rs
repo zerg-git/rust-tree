@@ -3,6 +3,7 @@
 use std::path::Path;
 use walkdir::WalkDir;
 use crate::core::models::{FsNode, FsTree, FsNodeType, TreeError};
+use crate::core::filter::FilterConfig;
 
 /// Configuration for directory walking.
 #[derive(Debug, Clone)]
@@ -17,6 +18,8 @@ pub struct WalkConfig {
     pub sort_by: SortField,
     /// Reverse sort order
     pub reverse: bool,
+    /// Filter configuration
+    pub filter: FilterConfig,
 }
 
 /// Sort field for directory entries.
@@ -38,6 +41,7 @@ impl Default for WalkConfig {
             follow_symlinks: false,
             sort_by: SortField::Name,
             reverse: false,
+            filter: FilterConfig::default(),
         }
     }
 }
@@ -135,13 +139,9 @@ fn collect_children(path: &Path, depth: usize, config: &WalkConfig) -> Result<Ve
     for entry in walker {
         match entry {
             Ok(entry) => {
-                // Skip hidden files if not requested
-                if !config.show_hidden {
-                    if let Some(file_name) = entry.file_name().to_str() {
-                        if file_name.starts_with('.') {
-                            continue;
-                        }
-                    }
+                // Apply filter
+                if config.filter.should_exclude(entry.path()) {
+                    continue;
                 }
 
                 match walk_recursive(entry.path(), depth, config) {

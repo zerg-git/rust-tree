@@ -1,6 +1,8 @@
 //! Tree-style output formatter.
 
 use crate::core::models::FsNode;
+use crate::config::{ColorMode, ColorScheme};
+use crate::config::color::{colorize_node, should_use_colors};
 use humansize::format_size;
 
 /// Format a file tree as a tree structure using Unicode box-drawing characters.
@@ -9,14 +11,22 @@ use humansize::format_size;
 ///
 /// * `node` - The root node of the tree
 /// * `show_size` - Whether to display file sizes
+/// * `color_mode` - When to use colors
+/// * `color_scheme` - Color scheme to use
 ///
 /// # Returns
 ///
 /// A formatted string representing the tree structure.
-pub fn format_tree(node: &FsNode, show_size: bool) -> String {
+pub fn format_tree(node: &FsNode, show_size: bool, color_mode: ColorMode, color_scheme: ColorScheme) -> String {
     let mut output = String::new();
 
-    // Print root directory
+    // Print root directory with color
+    let root_name = if should_use_colors(color_mode) {
+        colorize_node(node, color_scheme).to_string()
+    } else {
+        node.name.clone()
+    };
+
     let size_str = if show_size && node.is_directory() {
         format!(" ({} files)", count_files_recursive(node))
     } else if show_size && node.size > 0 {
@@ -25,7 +35,7 @@ pub fn format_tree(node: &FsNode, show_size: bool) -> String {
         String::new()
     };
 
-    output.push_str(&format!("{}{}/\n", node.name, size_str));
+    output.push_str(&format!("{}{}/\n", root_name, size_str));
 
     // Print children with tree prefixes
     if let Some(children) = &node.children {
@@ -36,6 +46,8 @@ pub fn format_tree(node: &FsNode, show_size: bool) -> String {
                 "",
                 i == last_index,
                 show_size,
+                color_mode,
+                color_scheme,
                 &mut output,
             );
         }
@@ -50,6 +62,8 @@ fn format_node_recursive(
     prefix: &str,
     is_last: bool,
     show_size: bool,
+    color_mode: ColorMode,
+    color_scheme: ColorScheme,
     output: &mut String,
 ) {
     // Determine the connector and next prefix
@@ -61,8 +75,15 @@ fn format_node_recursive(
 
     let next_prefix = format!("{}{}", prefix, next_prefix_base);
 
-    // Build the node label
-    let mut label = node.name.clone();
+    // Build the node label with color
+    let use_color = should_use_colors(color_mode);
+    let name = if use_color {
+        colorize_node(node, color_scheme).to_string()
+    } else {
+        node.name.clone()
+    };
+
+    let mut label = name;
 
     // Add directory indicator
     if node.is_directory() {
@@ -97,6 +118,8 @@ fn format_node_recursive(
                 &next_prefix,
                 i == last_index,
                 show_size,
+                color_mode,
+                color_scheme,
                 output,
             );
         }
@@ -157,7 +180,7 @@ mod tests {
         );
         root.children = Some(vec![dir1, file1]);
 
-        let output = format_tree(&root, false);
+        let output = format_tree(&root, false, ColorMode::Never, ColorScheme::None);
 
         assert!(output.contains("root/"));
         assert!(output.contains("subdir/"));

@@ -23,6 +23,10 @@
   - 显示隐藏文件
   - 显示文件大小
   - 跟随符号链接
+  - **颜色支持** 提高可读性
+  - **排除模式** 过滤文件
+  - **进度指示** 用于大目录扫描
+  - **流式模式** 用于内存高效扫描
 
 ## 安装
 
@@ -70,6 +74,55 @@ rust-tree -f json
 rust-tree -f table -S
 ```
 
+### 颜色支持
+
+```bash
+# 始终使用颜色
+rust-tree --color=always
+
+# 从不使用颜色（适用于输出到文件）
+rust-tree --color=never
+
+# 自动检测终端支持（默认）
+rust-tree --color=auto
+
+# 使用扩展颜色方案，支持更多文件类型颜色
+rust-tree --color-scheme=extended
+```
+
+### 文件过滤
+
+```bash
+# 排除匹配模式的文件
+rust-tree --exclude "*.log"
+
+# 排除多个模式
+rust-tree -e "*.log" -e "node_modules" -e ".git"
+
+# 仅包含匹配模式的文件
+rust-tree --include-only "*.rs"
+
+# 使用特定语言的常见排除模式
+rust-tree --exclude-common=rust      # Rust 项目
+rust-tree --exclude-common=python    # Python 项目
+rust-tree --exclude-common=nodejs    # Node.js 项目
+rust-tree --exclude-common=common    # 通用开发文件
+```
+
+### 进度指示
+
+```bash
+# 扫描期间显示进度条
+rust-tree --progress
+```
+
+### 流式模式
+
+```bash
+# 使用流式模式进行内存高效的大目录扫描
+rust-tree --streaming
+```
+
 ### 显示选项
 
 ```bash
@@ -89,17 +142,26 @@ rust-tree -o type
 ### 示例
 
 ```bash
-# 显示带大小和统计信息的目录树
-rust-tree -s -S
+# 显示带颜色和大小的目录树
+rust-tree --color=always -s
+
+# 扫描大目录时显示进度
+rust-tree --progress /large/directory
+
+# 排除构建产物和依赖
+rust-tree --exclude-common=rust --exclude "*.rlib"
+
+# 使用流式模式进行内存高效扫描
+rust-tree --streaming -d 5 /very/large/directory
 
 # JSON 输出完整统计信息
 rust-tree -f json -S > stats.json
 
-# 仅显示 3 层深度，按大小排序
-rust-tree -d 3 -o size -r
+# 仅显示 Rust 源文件
+rust-tree --include-only "*.rs"
 
-# 表格格式显示所有文件（包括隐藏文件）
-rust-tree -f table -a -S
+# 带统计信息的彩色目录树
+rust-tree --color-scheme=extended -s -S
 ```
 
 ## 命令行选项
@@ -115,6 +177,13 @@ rust-tree -f table -a -S
 | `-S, --stats` | 显示统计摘要 | false |
 | `-L, --follow` | 跟随符号链接 | false |
 | `--top-files <N>` | 显示的最大文件数量 | 10 |
+| `--color <WHEN>` | 颜色模式（always/never/auto） | auto |
+| `--color-scheme <SCHEME>` | 颜色方案（none/basic/extended） | basic |
+| `-p, --progress` | 显示进度条 | false |
+| `-e, --exclude <PATTERN>` | 排除匹配模式的文件 | - |
+| `--include-only <PATTERN>` | 仅包含匹配模式的文件 | - |
+| `--exclude-common <LANGUAGE>` | 使用常见排除模式 | - |
+| `--streaming` | 使用流式模式降低内存占用 | false |
 | `-h, --help` | 打印帮助信息 | - |
 | `-V, --version` | 打印版本信息 | - |
 
@@ -186,15 +255,19 @@ rust-tree/
 ├── src/
 │   ├── main.rs          # CLI 入口
 │   ├── lib.rs           # 库接口
-│   ├── config.rs        # 配置
+│   ├── config.rs        # 配置与 CLI 解析
 │   ├── core/            # 核心功能
 │   │   ├── models.rs    # 数据结构
 │   │   ├── walker.rs    # 目录遍历
-│   │   └── collector.rs # 统计信息收集
+│   │   ├── collector.rs # 统计信息收集
+│   │   ├── filter.rs    # 模式过滤
+│   │   ├── progress.rs  # 进度指示
+│   │   └── streaming.rs # 内存高效的流式处理
 │   └── formatters/      # 输出格式化器
 │       ├── tree.rs      # 树形格式
 │       ├── json.rs      # JSON 格式
-│       └── table.rs     # 表格格式
+│       ├── table.rs     # 表格格式
+│       └── streaming_tree.rs # 流式树形格式
 ├── docs/                # 文档
 └── tests/               # 测试
 ```

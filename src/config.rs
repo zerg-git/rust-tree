@@ -4,6 +4,9 @@ use std::path::PathBuf;
 use clap::{Parser, ValueEnum};
 use crate::core::walker::{WalkConfig, SortField};
 
+pub mod color;
+pub use color::{ColorMode, ColorScheme};
+
 /// Output format options.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum OutputFormat {
@@ -83,17 +86,89 @@ pub struct Config {
     /// Number of largest files to show in statistics
     #[arg(long = "top-files", default_value = "10", value_name = "N")]
     pub top_files: usize,
+
+    /// Color mode (always, never, auto)
+    #[arg(long = "color", default_value = "auto", value_name = "WHEN")]
+    pub color_mode: ColorMode,
+
+    /// Color scheme (none, basic, extended)
+    #[arg(long = "color-scheme", default_value = "basic", value_name = "SCHEME")]
+    pub color_scheme: ColorScheme,
+
+    /// Show progress bar during scanning
+    #[arg(long = "progress", short = 'p', help = "Show progress bar during scanning")]
+    pub show_progress: bool,
+
+    /// Exclude files matching pattern (can be used multiple times)
+    #[arg(short = 'e', long = "exclude", value_name = "PATTERN")]
+    pub exclude: Vec<String>,
+
+    /// Include only files matching pattern
+    #[arg(long = "include-only", value_name = "PATTERN")]
+    pub include_only: Option<String>,
+
+    /// Use common exclude patterns for a language
+    #[arg(long = "exclude-common", value_name = "LANGUAGE")]
+    pub exclude_common: Option<String>,
+
+    /// Use streaming mode for low memory usage
+    #[arg(long = "streaming", help = "Use streaming mode for low memory usage")]
+    pub streaming: bool,
 }
 
 impl Config {
     /// Convert to a WalkConfig for use by the walker module.
     pub fn to_walk_config(&self) -> WalkConfig {
+        use crate::core::filter::FilterConfig;
+        use crate::core::filter::common_excludes;
+
+        let mut filter = FilterConfig::new();
+        filter.exclude_hidden = !self.show_hidden;
+
+        // Add exclude patterns
+        for pattern in &self.exclude {
+            let _ = filter.add_exclude(pattern);
+        }
+
+        // Add include pattern
+        if let Some(ref pattern) = self.include_only {
+            let _ = filter.set_include(pattern);
+        }
+
+        // Add common excludes
+        if let Some(ref lang) = self.exclude_common {
+            match lang.as_str() {
+                "rust" => {
+                    for pattern in common_excludes::rust_patterns() {
+                        let _ = filter.add_exclude(pattern);
+                    }
+                }
+                "node" | "nodejs" | "javascript" => {
+                    for pattern in common_excludes::nodejs_patterns() {
+                        let _ = filter.add_exclude(pattern);
+                    }
+                }
+                "python" => {
+                    for pattern in common_excludes::python_patterns() {
+                        let _ = filter.add_exclude(pattern);
+                    }
+                }
+                "common" => {
+                    for pattern in common_excludes::common_patterns() {
+                        let _ = filter.add_exclude(pattern);
+                    }
+                }
+                _ => {}
+            }
+        }
+
         WalkConfig {
             max_depth: self.max_depth,
             show_hidden: self.show_hidden,
             follow_symlinks: self.follow_symlinks,
             sort_by: self.sort_by.into(),
             reverse: self.reverse,
+            filter,
         }
     }
 
