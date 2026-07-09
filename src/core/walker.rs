@@ -1,11 +1,18 @@
-//! Directory traversal functionality using walkdir.
+//! In-memory tree builder.
+//!
+//! This module owns the `WalkConfig` / `SortField` configuration and the
+//! `walk_directory` entry point. Traversal, sorting, and filtering all live in
+//! `crate::core::streaming::walk_core`; `walk_directory` is a thin consumer of
+//! that stream that materializes an `FsTree` for callers needing the whole tree
+//! in memory (JSON, statistics, largest-files).
 
 use std::path::Path;
-use walkdir::WalkDir;
 use crate::core::models::{FsNode, FsTree, FsNodeType, TreeError};
 use crate::core::filter::FilterConfig;
+use crate::core::streaming::walk_core;
 
-/// Configuration for directory walking.
+/// Configuration for directory walking. Shared by both the in-memory builder
+/// and the streaming formatter.
 #[derive(Debug, Clone)]
 pub struct WalkConfig {
     /// Maximum depth to traverse (0 for unlimited)
@@ -46,23 +53,13 @@ impl Default for WalkConfig {
     }
 }
 
-/// Walk a directory and build a file tree.
-///
-/// # Arguments
-///
-/// * `path` - Root directory path to walk
-/// * `config` - Configuration options for walking
-///
-/// # Returns
-///
-/// A `FsTree` containing the complete directory structure.
+/// Walk a directory and build a complete in-memory file tree.
 ///
 /// # Errors
 ///
 /// Returns `TreeError` if the path doesn't exist, isn't a directory,
-/// or permission is denied.
+/// or permission is denied on the root.
 pub fn walk_directory(path: &Path, config: &WalkConfig) -> Result<FsTree, TreeError> {
-    // Validate the path
     if !path.exists() {
         return Err(TreeError::PathNotFound(path.to_path_buf()));
     }
@@ -72,171 +69,91 @@ pub fn walk_directory(path: &Path, config: &WalkConfig) -> Result<FsTree, TreeEr
         return Err(TreeError::NotADirectory(path.to_path_buf()));
     }
 
-    // Build the tree recursively
-    let root_node = walk_recursive(path, 0, config)?;
-    let max_depth = calculate_max_depth(&root_node);
-
-    Ok(FsTree::new(root_node, max_depth))
-}
-
-/// Recursively walk a directory and build a node.
-fn walk_recursive(path: &Path, depth: usize, config: &WalkConfig) -> Result<FsNode, TreeError> {
-    let name = path.file_name()
+    let root_name = path
+        .file_name()
         .and_then(|n| n.to_str())
-        .unwrap_or("")
+        .unwrap_or(".")
         .to_string();
 
-    let meta = std::fs::metadata(path)
-        .or_else(|_| std::fs::symlink_metadata(path))?;
+    // Stack of open directory frames; stack[0] is always the root. A frame is
+    // attached to its parent when it is popped, which happens exactly when the
+    // next sibling (or uncle) arrives — preserving stream (sorted) order.
+    let mut stack: Vec<FsNode> =
+        vec![FsNode::new_directory(root_name, path.to_path_buf(), 0, Vec::new())];
+    let mut max_depth = 0usize;
 
-    let node_type = if meta.is_symlink() {
-        FsNodeType::Symlink
-    } else if meta.is_dir() {
-        FsNodeType::Directory
-    } else {
-        FsNodeType::File
-    };
+    walk_core(path, config, |node| {
+        if node.depth > max_depth {
+            max_depth = node.depth;
+        }
 
-    let size = meta.len();
+        // Close every frame deeper than this node's parent.
+        while stack.len() > node.depth {
+            let finished = stack.pop().unwrap();
+            attach(&mut stack, finished);
+        }
 
-    // If it's a directory, collect children
-    let children = if node_type == FsNodeType::Directory {
-        // Check depth limit
-        if config.max_depth > 0 && depth >= config.max_depth {
-            None
-        } else {
-            let entries = collect_children(path, depth + 1, config)?;
-            if entries.is_empty() {
-                None
-            } else {
-                Some(entries)
+        match node.node_type {
+            FsNodeType::Directory => {
+                stack.push(FsNode::new_directory(
+                    node.name.clone(),
+                    node.path.clone(),
+                    node.depth,
+                    Vec::new(),
+                ));
+            }
+            _ => {
+                let leaf = FsNode::new(
+                    node.name.clone(),
+                    node.path.clone(),
+                    node.node_type.clone(),
+                    node.size,
+                    node.depth,
+                );
+                if let Some(parent) = stack.last_mut() {
+                    parent.children.get_or_insert_with(Vec::new).push(leaf);
+                }
             }
         }
-    } else {
-        None
-    };
+    })?;
 
-    let mut node = FsNode::new(name, path.to_path_buf(), node_type, size, depth);
-
-    if let Some(children) = children {
-        node.children = Some(children);
+    // Close all remaining frames down to the root.
+    while stack.len() > 1 {
+        let finished = stack.pop().unwrap();
+        attach(&mut stack, finished);
     }
 
-    Ok(node)
+    let mut root = stack.pop().unwrap();
+    normalize_empty_children(&mut root);
+
+    Ok(FsTree::new(root, max_depth))
 }
 
-/// Collect and sort child entries of a directory.
-fn collect_children(path: &Path, depth: usize, config: &WalkConfig) -> Result<Vec<FsNode>, TreeError> {
-    let mut entries = Vec::new();
-
-    // Use WalkDir for efficient traversal
-    let mut walker = WalkDir::new(path)
-        .min_depth(1)
-        .max_depth(1)
-        .follow_links(config.follow_symlinks)
-        .into_iter();
-
-    for entry in walker {
-        match entry {
-            Ok(entry) => {
-                // Apply filter
-                if config.filter.should_exclude(entry.path()) {
-                    continue;
-                }
-
-                match walk_recursive(entry.path(), depth, config) {
-                    Ok(node) => entries.push(node),
-                    Err(_) => {
-                        // Skip entries we can't access
-                        continue;
-                    }
-                }
-            }
-            Err(_) => {
-                // Skip IO errors (permission denied, etc.)
-                continue;
-            }
-        }
-    }
-
-    // Sort entries
-    sort_entries(&mut entries, config);
-
-    Ok(entries)
-}
-
-/// Sort directory entries based on configuration.
-fn sort_entries(entries: &mut [FsNode], config: &WalkConfig) {
-    match config.sort_by {
-        SortField::Name => {
-            entries.sort_by(|a, b| {
-                // Directories first
-                if a.is_directory() && !b.is_directory() {
-                    return std::cmp::Ordering::Less;
-                }
-                if !a.is_directory() && b.is_directory() {
-                    return std::cmp::Ordering::Greater;
-                }
-                // Then by name
-                a.name.cmp(&b.name)
-            });
-        }
-        SortField::Size => {
-            entries.sort_by(|a, b| {
-                // Directories first
-                if a.is_directory() && !b.is_directory() {
-                    return std::cmp::Ordering::Less;
-                }
-                if !a.is_directory() && b.is_directory() {
-                    return std::cmp::Ordering::Greater;
-                }
-                // Then by size
-                b.size.cmp(&a.size)
-            });
-        }
-        SortField::Type => {
-            entries.sort_by(|a, b| {
-                // Directories first
-                if a.is_directory() && !b.is_directory() {
-                    return std::cmp::Ordering::Less;
-                }
-                if !a.is_directory() && b.is_directory() {
-                    return std::cmp::Ordering::Greater;
-                }
-                // Then by extension
-                let a_ext = a.extension().unwrap_or_default();
-                let b_ext = b.extension().unwrap_or_default();
-                a_ext.cmp(&b_ext)
-                    .then_with(|| a.name.cmp(&b.name))
-            });
-        }
-    }
-
-    // Reverse if requested
-    if config.reverse {
-        entries.reverse();
+/// Attach a finished node to its parent (the current stack top).
+fn attach(stack: &mut [FsNode], mut finished: FsNode) {
+    normalize_empty_children(&mut finished);
+    if let Some(parent) = stack.last_mut() {
+        parent
+            .children
+            .get_or_insert_with(Vec::new)
+            .push(finished);
     }
 }
 
-/// Calculate the maximum depth of a node tree.
-fn calculate_max_depth(node: &FsNode) -> usize {
-    let mut max_depth = node.depth;
-
+/// A directory with no children carries `children == None` (not `Some([])`),
+/// matching how leaf/empty directories are represented elsewhere.
+fn normalize_empty_children(node: &mut FsNode) {
     if let Some(children) = &node.children {
-        for child in children {
-            let child_depth = calculate_max_depth(child);
-            if child_depth > max_depth {
-                max_depth = child_depth;
-            }
+        if children.is_empty() {
+            node.children = None;
         }
     }
-
-    max_depth
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
 
     #[test]
     fn test_walk_config_default() {
@@ -244,5 +161,53 @@ mod tests {
         assert_eq!(config.max_depth, 0);
         assert!(!config.show_hidden);
         assert!(!config.follow_symlinks);
+    }
+
+    #[test]
+    fn test_walk_directory_builds_tree() {
+        let temp = TempDir::new().unwrap();
+        std::fs::create_dir(temp.path().join("sub")).unwrap();
+        std::fs::write(temp.path().join("sub/inner.txt"), b"hi").unwrap();
+        std::fs::write(temp.path().join("top.txt"), b"hello").unwrap();
+
+        let tree = walk_directory(temp.path(), &WalkConfig::default()).unwrap();
+
+        let children = tree.root.children.as_ref().unwrap();
+        // Directory first, then file.
+        assert_eq!(children[0].name, "sub");
+        assert!(children[0].is_directory());
+        let inner = children[0].children.as_ref().unwrap();
+        assert_eq!(inner[0].name, "inner.txt");
+        assert!(children.iter().any(|c| c.name == "top.txt"));
+        assert_eq!(tree.max_depth, 2);
+    }
+
+    #[test]
+    fn test_walk_directory_max_depth() {
+        let temp = TempDir::new().unwrap();
+        std::fs::create_dir(temp.path().join("sub")).unwrap();
+        std::fs::write(temp.path().join("sub/inner.txt"), b"hi").unwrap();
+
+        // max_depth 1: "sub" appears but its children are pruned.
+        let config = WalkConfig { max_depth: 1, ..Default::default() };
+        let tree = walk_directory(temp.path(), &config).unwrap();
+        let sub = tree
+            .root
+            .children
+            .as_ref()
+            .unwrap()
+            .iter()
+            .find(|c| c.name == "sub")
+            .unwrap();
+        assert!(sub.children.is_none());
+        assert_eq!(tree.max_depth, 1);
+    }
+
+    #[test]
+    fn test_walk_directory_empty() {
+        let temp = TempDir::new().unwrap();
+        let tree = walk_directory(temp.path(), &WalkConfig::default()).unwrap();
+        assert!(tree.root.children.is_none());
+        assert_eq!(tree.max_depth, 0);
     }
 }

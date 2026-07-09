@@ -35,7 +35,12 @@ impl FilterConfig {
     }
 
     /// Check if a path should be excluded.
-    pub fn should_exclude(&self, path: &Path) -> bool {
+    ///
+    /// `is_dir` indicates whether the path is a directory. The `include_pattern`
+    /// only filters files: directories always descend (unless hit by an exclude
+    /// pattern or the hidden rule), otherwise an `--include-only "*.rs"` would
+    /// prune every subdirectory and yield nothing.
+    pub fn should_exclude(&self, path: &Path, is_dir: bool) -> bool {
         // Check hidden files
         if self.exclude_hidden {
             if let Some(file_name) = path.file_name() {
@@ -47,7 +52,7 @@ impl FilterConfig {
             }
         }
 
-        // Check exclude patterns
+        // Check exclude patterns (apply to both files and directories)
         for pattern in &self.exclude_patterns {
             if pattern.matches_path(path) {
                 return true;
@@ -62,15 +67,18 @@ impl FilterConfig {
             }
         }
 
-        // Check include pattern
-        if let Some(ref pattern) = self.include_pattern {
-            if !pattern.matches_path(path) {
-                if let Some(file_name) = path.file_name() {
-                    if let Some(name_str) = file_name.to_str() {
-                        if !pattern.matches(name_str) {
-                            return true;
-                        }
-                    }
+        // Check include pattern — files only. Directories always descend so
+        // matching files deeper in the tree remain reachable.
+        if !is_dir {
+            if let Some(ref pattern) = self.include_pattern {
+                let matches_path = pattern.matches_path(path);
+                let matches_name = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|n| pattern.matches(n))
+                    .unwrap_or(false);
+                if !matches_path && !matches_name {
+                    return true;
                 }
             }
         }
@@ -136,25 +144,44 @@ mod tests {
             exclude_hidden: true,
             ..Default::default()
         };
-        assert!(config.should_exclude(Path::new(".git")));
-        assert!(config.should_exclude(Path::new(".hidden")));
-        assert!(!config.should_exclude(Path::new("visible")));
+        assert!(config.should_exclude(Path::new(".git"), true));
+        assert!(config.should_exclude(Path::new(".hidden"), false));
+        assert!(!config.should_exclude(Path::new("visible"), false));
     }
 
     #[test]
     fn test_should_exclude_pattern() {
         let mut config = FilterConfig::new();
         config.add_exclude("*.log").unwrap();
-        assert!(config.should_exclude(Path::new("test.log")));
-        assert!(!config.should_exclude(Path::new("test.txt")));
+        assert!(config.should_exclude(Path::new("test.log"), false));
+        assert!(!config.should_exclude(Path::new("test.txt"), false));
     }
 
     #[test]
     fn test_include_only_pattern() {
         let mut config = FilterConfig::new();
         config.set_include("*.rs").unwrap();
-        assert!(!config.should_exclude(Path::new("main.rs")));
-        assert!(config.should_exclude(Path::new("main.py")));
+        assert!(!config.should_exclude(Path::new("main.rs"), false));
+        assert!(config.should_exclude(Path::new("main.py"), false));
+    }
+
+    #[test]
+    fn test_include_only_does_not_prune_directories() {
+        // A directory named "src" must still descend even though it does not
+        // match "*.rs", so that main.rs inside it stays reachable.
+        let mut config = FilterConfig::new();
+        config.set_include("*.rs").unwrap();
+        assert!(!config.should_exclude(Path::new("src"), true));
+        assert!(!config.should_exclude(Path::new("main.rs"), false));
+        assert!(config.should_exclude(Path::new("main.py"), false));
+    }
+
+    #[test]
+    fn test_exclude_pattern_still_applies_to_directories() {
+        let mut config = FilterConfig::new();
+        config.add_exclude("target").unwrap();
+        assert!(config.should_exclude(Path::new("target"), true));
+        assert!(!config.should_exclude(Path::new("src"), true));
     }
 
     #[test]

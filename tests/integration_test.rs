@@ -1,6 +1,5 @@
 //! Integration tests for rust-tree
 
-use std::path::PathBuf;
 use std::fs::{self, File};
 use std::io::Write;
 
@@ -46,7 +45,7 @@ fn test_collect_stats() {
     let config = rust_tree::core::walker::WalkConfig::default();
 
     let tree = rust_tree::core::walker::walk_directory(test_dir.path(), &config).unwrap();
-    let stats = rust_tree::core::collector::collect_stats(&tree, std::time::Instant::now());
+    let stats = rust_tree::core::collector::collect_stats(&tree, std::time::Instant::now(), 10);
 
     assert!(stats.total_files > 0);
     assert!(stats.total_directories > 0);

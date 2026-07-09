@@ -1,19 +1,20 @@
 //! Streaming tree formatter for memory-efficient output.
 
 use std::io::Write;
-use crate::core::streaming::{walk_streaming, StreamNode, StreamConfig};
+use crate::core::streaming::{walk_core, StreamNode};
+use crate::core::walker::WalkConfig;
 use crate::config::{ColorMode, ColorScheme};
 use crate::config::color::should_use_colors;
 use humansize::format_size;
 
-/// Format a tree using streaming (constant memory).
+/// Format a tree using the streaming core (peak memory O(widest directory)).
 pub fn format_tree_streaming<W: Write>(
     root: &std::path::Path,
     writer: &mut W,
     show_size: bool,
     color_mode: ColorMode,
     color_scheme: ColorScheme,
-    config: StreamConfig,
+    config: WalkConfig,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let use_color = should_use_colors(color_mode);
 
@@ -32,53 +33,39 @@ pub fn format_tree_streaming<W: Write>(
 
     writeln!(writer, "{}/", root_colored)?;
 
-    // Track prefix state for tree drawing
+    // prefix_stack[d] holds the is_last flag of the node currently on the path
+    // at depth d. Children start at depth 1.
     let mut prefix_stack: Vec<bool> = Vec::new();
 
-    // Walk tree and output nodes as we visit them
-    walk_streaming(root, config, |node| {
-        // Update prefix stack for current depth
+    walk_core(root, &config, |node| {
         while prefix_stack.len() <= node.depth {
             prefix_stack.push(false);
         }
+        prefix_stack[node.depth] = node.is_last;
 
-        // Set the "is last" flag for parent depth
-        if node.depth > 0 {
-            prefix_stack[node.depth - 1] = node.is_last;
-        }
-
-        // Build prefix based on depth
         let prefix = build_prefix(&prefix_stack, node.depth);
-
-        // Build label
         let label = build_label(node, show_size, use_color, color_scheme);
-
-        // Write line
         let _ = writeln!(writer, "{}{}", prefix, label);
     })?;
 
     Ok(())
 }
 
-/// Build the tree prefix for current depth.
-fn build_prefix(prefix_stack: &[bool], current_depth: usize) -> String {
-    if current_depth == 0 {
-        return String::new();
-    }
-
+/// Build the tree prefix for a node at `depth` (>= 1).
+///
+/// Ancestor levels 1..depth draw a spacer or vertical bar depending on whether
+/// that ancestor was its parent's last child; the node's own level draws the
+/// branch connector.
+fn build_prefix(prefix_stack: &[bool], depth: usize) -> String {
     let mut prefix = String::new();
 
-    for (i, is_last) in prefix_stack.iter().enumerate() {
-        if i >= current_depth {
-            break;
-        }
-
-        if i == current_depth - 1 {
-            prefix.push_str(if *is_last { "└── " } else { "├── " });
-        } else {
-            prefix.push_str(if *is_last { "    " } else { "│   " });
-        }
+    for level in 1..depth {
+        let ancestor_is_last = prefix_stack.get(level).copied().unwrap_or(false);
+        prefix.push_str(if ancestor_is_last { "    " } else { "│   " });
     }
+
+    let is_last = prefix_stack.get(depth).copied().unwrap_or(false);
+    prefix.push_str(if is_last { "└── " } else { "├── " });
 
     prefix
 }
@@ -177,8 +164,12 @@ fn extended_file_color(name: &str, ext: &str) -> colored::ColoredString {
 mod tests {
     use super::*;
 
+    // prefix_stack[d] = is_last flag of the node on the path at depth d.
+    // Index 0 is unused (root is drawn separately); children start at depth 1.
+
     #[test]
     fn test_build_prefix() {
+        // A depth-1 node that is not its parent's last child.
         let prefix_stack = vec![false, false];
         let prefix = build_prefix(&prefix_stack, 1);
         assert_eq!(prefix, "├── ");
@@ -186,15 +177,25 @@ mod tests {
 
     #[test]
     fn test_build_prefix_last() {
-        let prefix_stack = vec![true, false];
+        // A depth-1 node that is its parent's last child.
+        let prefix_stack = vec![false, true];
         let prefix = build_prefix(&prefix_stack, 1);
         assert_eq!(prefix, "└── ");
     }
 
     #[test]
     fn test_build_prefix_nested() {
-        let prefix_stack = vec![false, true, false];
+        // depth-2 node, last child; its depth-1 ancestor is NOT last => "│   ".
+        let prefix_stack = vec![false, false, true];
         let prefix = build_prefix(&prefix_stack, 2);
         assert_eq!(prefix, "│   └── ");
+    }
+
+    #[test]
+    fn test_build_prefix_nested_ancestor_last() {
+        // depth-2 node, last child; its depth-1 ancestor IS last => "    ".
+        let prefix_stack = vec![false, true, true];
+        let prefix = build_prefix(&prefix_stack, 2);
+        assert_eq!(prefix, "    └── ");
     }
 }

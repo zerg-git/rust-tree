@@ -67,10 +67,10 @@ fn format_node_recursive(
     output: &mut String,
 ) {
     // Determine the connector and next prefix
-    let (connector, next_prefix_base) = if prefix.is_empty() {
-        if is_last { ("└── ", "    ") } else { ("├── ", "│   ") }
+    let (connector, next_prefix_base) = if is_last {
+        ("└── ", "    ")
     } else {
-        if is_last { ("└── ", "    ") } else { ("├── ", "│   ") }
+        ("├── ", "│   ")
     };
 
     let next_prefix = format!("{}{}", prefix, next_prefix_base);
@@ -155,7 +155,7 @@ mod tests {
 
     #[test]
     fn test_format_tree_simple() {
-        let mut file1 = FsNode::new(
+        let file1 = FsNode::new(
             "file.txt".into(),
             "/test/file.txt".into(),
             FsNodeType::File,

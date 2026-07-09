@@ -33,7 +33,6 @@ pub use formatters::{format_tree, format_json, format_table};
 use std::io::{self, Write};
 use std::time::Instant;
 use crate::core::progress::{create_progress_bar, finish_progress, update_progress, ProgressConfig};
-use crate::core::streaming::StreamConfig;
 
 /// Run the rust-tree tool with the given configuration.
 ///
@@ -47,6 +46,17 @@ use crate::core::streaming::StreamConfig;
 /// Returns `TreeError` if directory traversal fails or output formatting fails.
 pub fn run(config: Config) -> Result<(), TreeError> {
     let start_time = Instant::now();
+
+    // Streaming emits nodes as they are visited and never materializes the tree,
+    // so statistics (which need the whole tree) cannot be computed. Reject the
+    // combination loudly instead of silently dropping the stats.
+    if config.streaming && config.should_show_stats() {
+        return Err(TreeError::Other(
+            "streaming mode does not support statistics; drop --stats or --streaming \
+             (and note -f json / -f table imply stats)"
+                .to_string(),
+        ));
+    }
 
     // Check if streaming mode is enabled
     if config.streaming {
@@ -67,7 +77,7 @@ pub fn run(config: Config) -> Result<(), TreeError> {
     finish_progress(&progress, "Scan complete");
 
     // Collect statistics
-    let stats = collect_stats(&tree, start_time);
+    let stats = collect_stats(&tree, start_time, config.top_files_count());
 
     // Format output based on selected format
     let output = match config.format {
@@ -103,19 +113,11 @@ pub fn run(config: Config) -> Result<(), TreeError> {
     Ok(())
 }
 
-/// Run in streaming mode (low memory usage).
+/// Run in streaming mode (peak memory O(widest directory)).
 fn run_streaming(config: Config) -> Result<(), TreeError> {
     use crate::formatters::streaming_tree::format_tree_streaming;
 
-    // Build streaming config
-    let stream_config = StreamConfig {
-        max_depth: config.max_depth,
-        show_hidden: config.show_hidden,
-        follow_symlinks: config.follow_symlinks,
-        sort_by: config.sort_by.into(),
-        reverse: config.reverse,
-        filter: config.to_walk_config().filter,
-    };
+    let walk_config = config.to_walk_config();
 
     // Use stdout directly for streaming
     let mut stdout = io::stdout().lock();
@@ -126,7 +128,7 @@ fn run_streaming(config: Config) -> Result<(), TreeError> {
         config.show_size,
         config.color_mode,
         config.color_scheme,
-        stream_config,
+        walk_config,
     ).map_err(|e| TreeError::Other(e.to_string()))?;
 
     io::stdout().flush().map_err(|e| TreeError::Other(e.to_string()))?;

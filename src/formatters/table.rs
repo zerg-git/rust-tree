@@ -97,9 +97,9 @@ fn format_extension_table(stats: &TreeStats) -> String {
 
     // Sort by count (descending)
     let mut extensions: Vec<_> = stats.files_by_extension.iter().collect();
-    extensions.sort_by(|a, b| b.1.count.cmp(&a.1.count));
+    extensions.sort_by_key(|e| std::cmp::Reverse(e.1.count));
 
-    for (ext, info) in extensions {
+    for (_ext, info) in extensions {
         table.add_row(vec![
             Cell::new(&info.extension),
             Cell::new(info.count.to_string()).fg(Color::Green),

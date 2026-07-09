@@ -4,20 +4,18 @@ use std::collections::HashMap;
 use std::time::Instant;
 use crate::core::models::{FsTree, FsNode, TreeStats, FileTypeInfo, FileEntry};
 
-/// Default number of largest files to track.
-const DEFAULT_MAX_LARGEST: usize = 10;
-
 /// Collect statistics from a file system tree.
 ///
 /// # Arguments
 ///
 /// * `tree` - The file system tree to analyze
 /// * `start_time` - When the scan started (for duration calculation)
+/// * `largest_limit` - How many largest files to keep (from `--top-files`)
 ///
 /// # Returns
 ///
 /// A `TreeStats` object containing all collected statistics.
-pub fn collect_stats(tree: &FsTree, start_time: Instant) -> TreeStats {
+pub fn collect_stats(tree: &FsTree, start_time: Instant, largest_limit: usize) -> TreeStats {
     let mut stats = TreeStats::new();
 
     // Collect all files and directories
@@ -28,7 +26,7 @@ pub fn collect_stats(tree: &FsTree, start_time: Instant) -> TreeStats {
     stats.files_by_extension = analyze_by_extension(&all_files, stats.total_size);
 
     // Find largest files
-    stats.largest_files = find_largest_files(&all_files, DEFAULT_MAX_LARGEST);
+    stats.largest_files = find_largest_files(&all_files, largest_limit);
 
     // Calculate scan duration
     stats.scan_duration = start_time.elapsed();
@@ -120,7 +118,7 @@ fn find_largest_files(files: &[&FsNode], limit: usize) -> Vec<FileEntry> {
         .collect();
 
     // Sort by size (descending)
-    entries.sort_by(|a, b| b.size.cmp(&a.size));
+    entries.sort_by_key(|e| std::cmp::Reverse(e.size));
 
     // Take top N
     entries.truncate(limit);
@@ -208,7 +206,7 @@ mod tests {
 
     #[test]
     fn test_find_largest_files() {
-        let files = vec![
+        let files = [
             FsNode::new("a.txt".into(), "/a.txt".into(), FsNodeType::File, 100, 0),
             FsNode::new("b.txt".into(), "/b.txt".into(), FsNodeType::File, 500, 0),
             FsNode::new("c.txt".into(), "/c.txt".into(), FsNodeType::File, 200, 0),
@@ -227,7 +225,7 @@ mod tests {
 
     #[test]
     fn test_analyze_by_extension() {
-        let files = vec![
+        let files = [
             FsNode::new("file.rs".into(), "/file.rs".into(), FsNodeType::File, 100, 0),
             FsNode::new("doc.md".into(), "/doc.md".into(), FsNodeType::File, 50, 0),
             FsNode::new("main.rs".into(), "/main.rs".into(), FsNodeType::File, 200, 0),

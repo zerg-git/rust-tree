@@ -1,12 +1,20 @@
-//! Streaming directory traversal for memory efficiency.
+//! Single traversal core.
+//!
+//! `walk_core` is the one place directory traversal, sorting, and filtering
+//! live. It emits a depth-first, pre-order stream of `StreamNode`s via a
+//! callback (root's direct children at depth 1). Both the streaming formatter
+//! and the in-memory `FsTree` builder consume this stream, so there is no
+//! second traversal implementation to keep in sync.
+//!
+//! Peak memory is O(widest directory): only one directory's entries are
+//! buffered at a time for sorting — not the whole tree.
 
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
-use crate::core::models::{FsNode, FsNodeType, TreeError};
-use crate::core::walker::{SortField};
-use crate::core::filter::FilterConfig;
+use crate::core::models::{FsNodeType, TreeError};
+use crate::core::walker::{SortField, WalkConfig};
 
-/// A streaming tree node for output.
+/// A node emitted by the traversal core.
 #[derive(Debug, Clone)]
 pub struct StreamNode {
     pub name: String,
@@ -14,44 +22,24 @@ pub struct StreamNode {
     pub node_type: FsNodeType,
     pub size: u64,
     pub depth: usize,
-    pub has_children: bool,
-    pub is_last: bool, // true if this is the last child of its parent
+    /// True if this is the last child of its parent (for tree drawing).
+    pub is_last: bool,
 }
 
-/// Configuration for streaming traversal.
-#[derive(Debug, Clone)]
-pub struct StreamConfig {
-    pub max_depth: usize,
-    pub show_hidden: bool,
-    pub follow_symlinks: bool,
-    pub sort_by: SortField,
-    pub reverse: bool,
-    pub filter: FilterConfig,
+/// A directory entry after a single stat, reused for sorting and emission.
+struct Scanned {
+    name: String,
+    path: PathBuf,
+    node_type: FsNodeType,
+    size: u64,
 }
 
-impl Default for StreamConfig {
-    fn default() -> Self {
-        Self {
-            max_depth: 0,
-            show_hidden: false,
-            follow_symlinks: false,
-            sort_by: SortField::Name,
-            reverse: false,
-            filter: FilterConfig::default(),
-        }
-    }
-}
-
-/// Process a directory tree using streaming output.
+/// Walk a directory tree, emitting each descendant node exactly once.
 ///
-/// This function visits each node in the tree and calls the provided callback
-/// with information about the node. The callback can output the node immediately,
-/// enabling constant memory usage regardless of tree size.
-pub fn walk_streaming<F>(
-    root: &Path,
-    config: StreamConfig,
-    mut callback: F,
-) -> Result<(), TreeError>
+/// The callback receives nodes in depth-first pre-order. Root's direct
+/// children are at depth 1; the root itself is not emitted (callers render or
+/// build it themselves).
+pub fn walk_core<F>(root: &Path, config: &WalkConfig, mut callback: F) -> Result<(), TreeError>
 where
     F: FnMut(&StreamNode),
 {
@@ -64,183 +52,127 @@ where
         return Err(TreeError::NotADirectory(root.to_path_buf()));
     }
 
-    // Start recursive traversal
-    walk_recursive_streaming(root, 0, true, &config, &mut callback);
-
+    walk_children(root, 1, config, &mut callback);
     Ok(())
 }
 
-/// Recursively walk a directory with streaming output.
-fn walk_recursive_streaming<F>(
-    path: &Path,
-    depth: usize,
-    is_last: bool,
-    config: &StreamConfig,
-    callback: &mut F,
-) where
+/// Recursively emit the children of `dir` at the given `depth`.
+fn walk_children<F>(dir: &Path, depth: usize, config: &WalkConfig, callback: &mut F)
+where
     F: FnMut(&StreamNode),
 {
-    // Check depth limit
+    // Depth limit: children at depth D are emitted iff D <= max_depth. This
+    // matches `depth >= max_depth => no children` on the parent side.
     if config.max_depth > 0 && depth > config.max_depth {
         return;
     }
 
-    // Collect entries
-    let mut entries = Vec::new();
+    let mut scanned: Vec<Scanned> = Vec::new();
 
-    let walker = WalkDir::new(path)
+    let walker = WalkDir::new(dir)
         .min_depth(1)
         .max_depth(1)
         .follow_links(config.follow_symlinks)
         .into_iter();
 
     for entry in walker {
-        match entry {
-            Ok(entry) => {
-                // Apply filter
-                if config.filter.should_exclude(entry.path()) {
-                    continue;
-                }
-
-                entries.push(entry);
-            }
+        let entry = match entry {
+            Ok(e) => e,
             Err(_) => continue,
+        };
+
+        // file_type() is cached from readdir — no extra syscall.
+        let file_type = entry.file_type();
+        let is_dir = file_type.is_dir();
+
+        if config.filter.should_exclude(entry.path(), is_dir) {
+            continue;
         }
-    }
 
-    // Sort entries
-    sort_entries(&mut entries, config);
-
-    let total = entries.len();
-
-    // Process each entry
-    for (i, entry) in entries.into_iter().enumerate() {
-        let entry_path = entry.path();
-        let name = entry.file_name().to_string_lossy().to_string();
-
-        let meta = match std::fs::metadata(entry_path)
-            .or_else(|_| std::fs::symlink_metadata(entry_path)) {
-                Ok(m) => m,
-                Err(_) => continue,
-            };
-
-        let node_type = if meta.is_symlink() {
+        let node_type = if file_type.is_symlink() {
             FsNodeType::Symlink
-        } else if meta.is_dir() {
+        } else if is_dir {
             FsNodeType::Directory
         } else {
             FsNodeType::File
         };
 
-        let size = meta.len();
-        let is_last = i == total - 1;
-
-        // Recurse into directories
-        if node_type == FsNodeType::Directory {
-            // First, check if it has children (without loading them all)
-            let has_children = has_children(entry_path, config);
-
-            // Emit current directory
-            callback(&StreamNode {
-                name: name.clone(),
-                path: entry_path.to_path_buf(),
-                node_type,
-                size,
-                depth,
-                has_children,
-                is_last,
-            });
-
-            // Then recurse into children
-            walk_recursive_streaming(entry_path, depth + 1, is_last, config, callback);
+        // Only files need a size, so only files pay for a stat.
+        let size = if node_type == FsNodeType::File {
+            entry.metadata().map(|m| m.len()).unwrap_or(0)
         } else {
-            // Emit file/symlink
-            callback(&StreamNode {
-                name,
-                path: entry_path.to_path_buf(),
-                node_type,
-                size,
-                depth,
-                has_children: false,
-                is_last,
-            });
+            0
+        };
+
+        scanned.push(Scanned {
+            name: entry.file_name().to_string_lossy().to_string(),
+            path: entry.path().to_path_buf(),
+            node_type,
+            size,
+        });
+    }
+
+    sort_scanned(&mut scanned, config);
+
+    let total = scanned.len();
+    for (i, item) in scanned.into_iter().enumerate() {
+        let is_last = i + 1 == total;
+        let is_dir = item.node_type == FsNodeType::Directory;
+        let path = item.path.clone();
+
+        callback(&StreamNode {
+            name: item.name,
+            path: item.path,
+            node_type: item.node_type,
+            size: item.size,
+            depth,
+            is_last,
+        });
+
+        if is_dir {
+            walk_children(&path, depth + 1, config, callback);
         }
     }
 }
 
-/// Check if a directory has any (non-filtered) children.
-fn has_children(path: &Path, config: &StreamConfig) -> bool {
-    let walker = WalkDir::new(path)
-        .min_depth(1)
-        .max_depth(1)
-        .follow_links(config.follow_symlinks)
-        .into_iter();
-
-    for entry in walker {
-        if let Ok(entry) = entry {
-            if !config.filter.should_exclude(entry.path()) {
-                return true;
-            }
-        }
+/// File extension (without the dot) used for type sorting.
+fn ext_of(name: &str) -> &str {
+    match name.rfind('.') {
+        Some(idx) if idx > 0 => &name[idx + 1..],
+        _ => "",
     }
-
-    false
 }
 
-/// Sort entries based on configuration.
-fn sort_entries(entries: &mut Vec<walkdir::DirEntry>, config: &StreamConfig) {
+/// Sort scanned entries: directories first, then by the configured field.
+fn sort_scanned(entries: &mut [Scanned], config: &WalkConfig) {
+    let dir_first = |a: &Scanned, b: &Scanned| {
+        let a_dir = a.node_type == FsNodeType::Directory;
+        let b_dir = b.node_type == FsNodeType::Directory;
+        match (a_dir, b_dir) {
+            (true, false) => Some(std::cmp::Ordering::Less),
+            (false, true) => Some(std::cmp::Ordering::Greater),
+            _ => None,
+        }
+    };
+
     match config.sort_by {
-        SortField::Name => {
-            entries.sort_by(|a, b| {
-                let a_is_dir = a.path().is_dir();
-                let b_is_dir = b.path().is_dir();
+        SortField::Name => entries.sort_by(|a, b| {
+            dir_first(a, b).unwrap_or_else(|| a.name.cmp(&b.name))
+        }),
+        SortField::Size => entries.sort_by(|a, b| {
+            dir_first(a, b).unwrap_or_else(|| b.size.cmp(&a.size))
+        }),
+        SortField::Type => entries.sort_by(|a, b| {
+            dir_first(a, b).unwrap_or_else(|| {
+                ext_of(&a.name)
+                    .cmp(ext_of(&b.name))
+                    .then_with(|| a.name.cmp(&b.name))
+            })
+        }),
+    }
 
-                if a_is_dir && !b_is_dir {
-                    return std::cmp::Ordering::Less;
-                }
-                if !a_is_dir && b_is_dir {
-                    return std::cmp::Ordering::Greater;
-                }
-
-                a.file_name().cmp(b.file_name())
-            });
-        }
-        SortField::Size => {
-            entries.sort_by(|a, b| {
-                let a_is_dir = a.path().is_dir();
-                let b_is_dir = b.path().is_dir();
-
-                if a_is_dir && !b_is_dir {
-                    return std::cmp::Ordering::Less;
-                }
-                if !a_is_dir && b_is_dir {
-                    return std::cmp::Ordering::Greater;
-                }
-
-                let a_size = a.metadata().map(|m| m.len()).unwrap_or(0);
-                let b_size = b.metadata().map(|m| m.len()).unwrap_or(0);
-                b_size.cmp(&a_size)
-            });
-        }
-        SortField::Type => {
-            entries.sort_by(|a, b| {
-                let a_is_dir = a.path().is_dir();
-                let b_is_dir = b.path().is_dir();
-
-                if a_is_dir && !b_is_dir {
-                    return std::cmp::Ordering::Less;
-                }
-                if !a_is_dir && b_is_dir {
-                    return std::cmp::Ordering::Greater;
-                }
-
-                let a_ext = a.path().extension().and_then(|s| s.to_str()).unwrap_or("");
-                let b_ext = b.path().extension().and_then(|s| s.to_str()).unwrap_or("");
-
-                a_ext.cmp(b_ext)
-                    .then_with(|| a.file_name().cmp(b.file_name()))
-            });
-        }
+    if config.reverse {
+        entries.reverse();
     }
 }
 
@@ -250,18 +182,42 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
-    fn test_stream_config_default() {
-        let config = StreamConfig::default();
-        assert_eq!(config.max_depth, 0);
-        assert!(!config.show_hidden);
+    fn test_walk_core_empty() {
+        let temp = TempDir::new().unwrap();
+        let config = WalkConfig::default();
+
+        let mut count = 0;
+        let result = walk_core(temp.path(), &config, |_| count += 1);
+        assert!(result.is_ok());
+        assert_eq!(count, 0);
     }
 
     #[test]
-    fn test_walk_streaming() {
+    fn test_walk_core_children_start_at_depth_one() {
         let temp = TempDir::new().unwrap();
-        let config = StreamConfig::default();
+        std::fs::create_dir(temp.path().join("sub")).unwrap();
+        std::fs::write(temp.path().join("sub/inner.txt"), b"hi").unwrap();
 
-        let result = walk_streaming(temp.path(), config, |_| {});
-        assert!(result.is_ok());
+        let config = WalkConfig::default();
+        let mut depths = Vec::new();
+        walk_core(temp.path(), &config, |n| depths.push((n.name.clone(), n.depth))).unwrap();
+
+        assert!(depths.contains(&("sub".to_string(), 1)));
+        assert!(depths.contains(&("inner.txt".to_string(), 2)));
+    }
+
+    #[test]
+    fn test_walk_core_max_depth_matches_walker() {
+        let temp = TempDir::new().unwrap();
+        std::fs::create_dir(temp.path().join("sub")).unwrap();
+        std::fs::write(temp.path().join("sub/inner.txt"), b"hi").unwrap();
+
+        // max_depth 1 => only depth-1 nodes, no grandchildren.
+        let config = WalkConfig { max_depth: 1, ..Default::default() };
+        let mut names = Vec::new();
+        walk_core(temp.path(), &config, |n| names.push(n.name.clone())).unwrap();
+
+        assert!(names.contains(&"sub".to_string()));
+        assert!(!names.contains(&"inner.txt".to_string()));
     }
 }
