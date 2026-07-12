@@ -1,25 +1,25 @@
-//! Integration tests for rust-tree
+//! rust-tree 的集成测试
 
 use std::fs::{self, File};
 use std::io::Write;
 
-/// Create a temporary test directory structure
+/// 创建一个临时的测试目录结构
 fn create_test_dir() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path();
 
-    // Create directory structure
+    // 创建目录结构
     fs::create_dir_all(path.join("src/core")).unwrap();
     fs::create_dir_all(path.join("tests")).unwrap();
 
-    // Create some files
+    // 创建一些文件
     File::create(path.join("Cargo.toml")).unwrap();
     File::create(path.join("README.md")).unwrap();
     File::create(path.join("src/main.rs")).unwrap();
     File::create(path.join("src/lib.rs")).unwrap();
     File::create(path.join("src/core/models.rs")).unwrap();
 
-    // Write some content
+    // 写入一些内容
     let mut file = File::create(path.join("src/main.rs")).unwrap();
     file.write_all(b"fn main() { println!(\"Hello\"); }").unwrap();
 

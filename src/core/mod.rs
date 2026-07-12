@@ -1,4 +1,4 @@
-//! Core functionality for directory traversal and statistics collection.
+//! 目录遍历与统计信息收集的核心功能。
 
 pub mod models;
 pub mod walker;

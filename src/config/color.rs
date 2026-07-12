@@ -1,34 +1,34 @@
-//! Color configuration for tree output.
+//! 树形输出的颜色配置。
 
 use colored::Colorize;
 use clap::ValueEnum;
 use crate::core::models::FsNode;
 
-/// Color scheme options.
+/// 颜色方案选项。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
 pub enum ColorScheme {
-    /// No colors
+    /// 无颜色
     #[default]
     None,
-    /// Basic color scheme
+    /// 基础颜色方案
     Basic,
-    /// Extended color scheme (more file types)
+    /// 扩展颜色方案（支持更多文件类型）
     Extended,
 }
 
-/// When to use colors.
+/// 何时使用颜色。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
 pub enum ColorMode {
-    /// Always use colors
+    /// 始终使用颜色
     Always,
-    /// Never use colors
+    /// 从不使用颜色
     Never,
-    /// Auto-detect based on terminal (default)
+    /// 根据终端自动检测（默认）
     #[default]
     Auto,
 }
 
-/// Apply color to a node name based on its type.
+/// 根据节点类型为节点名称着色。
 pub fn colorize_node(node: &FsNode, scheme: ColorScheme) -> colored::ColoredString {
     match node.node_type {
         crate::core::models::FsNodeType::Directory => {
@@ -43,7 +43,7 @@ pub fn colorize_node(node: &FsNode, scheme: ColorScheme) -> colored::ColoredStri
     }
 }
 
-/// Apply color to a file name based on extension.
+/// 根据扩展名为文件名着色。
 fn colorize_file(name: &str, scheme: ColorScheme) -> colored::ColoredString {
     let ext = name.rsplit('.').next().unwrap_or("");
 
@@ -54,7 +54,7 @@ fn colorize_file(name: &str, scheme: ColorScheme) -> colored::ColoredString {
     }
 }
 
-/// Basic file color scheme.
+/// 基础的文件颜色方案。
 fn basic_file_color(name: &str, ext: &str) -> colored::ColoredString {
     match ext {
         "rs" | "py" | "js" | "ts" | "java" | "c" | "cpp" | "go" | "rb" | "php" => name.green(),
@@ -65,10 +65,10 @@ fn basic_file_color(name: &str, ext: &str) -> colored::ColoredString {
     }
 }
 
-/// Extended file color scheme with more file type support.
+/// 扩展的文件颜色方案，支持更多文件类型。
 fn extended_file_color(name: &str, ext: &str) -> colored::ColoredString {
     match ext {
-        // Source code files
+        // 源代码文件
         "rs" => name.bright_green(),
         "py" => name.green(),
         "js" | "ts" | "tsx" | "jsx" => name.yellow(),
@@ -76,92 +76,33 @@ fn extended_file_color(name: &str, ext: &str) -> colored::ColoredString {
         "go" => name.cyan(),
         "rb" | "php" => name.magenta(),
 
-        // Config files
+        // 配置文件
         "toml" | "yaml" | "yml" => name.bright_yellow(),
         "json" | "xml" => name.yellow(),
         "ini" | "cfg" | "conf" => name.bright_black(),
 
-        // Documentation
+        // 文档
         "md" | "rst" | "adoc" => name.white(),
         "txt" => name.bright_white(),
 
-        // Build/lock files
+        // 构建/锁文件
         "lock" => name.bright_black(),
 
-        // Images
+        // 图片
         "png" | "jpg" | "jpeg" | "gif" | "svg" | "ico" => name.bright_magenta(),
 
-        // Archives
+        // 归档文件
         "zip" | "tar" | "gz" | "rar" | "7z" => name.red(),
 
         _ => name.normal(),
     }
 }
 
-/// Check if colors should be used based on the mode.
+/// 根据模式判断是否应使用颜色。
 pub fn should_use_colors(mode: ColorMode) -> bool {
     match mode {
         ColorMode::Always => true,
         ColorMode::Never => false,
         ColorMode::Auto => atty::is(atty::Stream::Stdout),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::core::models::{FsNodeType, FsNode};
-
-    #[test]
-    fn test_colorize_directory() {
-        let node = FsNode::new(
-            "test_dir".into(),
-            "/test".into(),
-            FsNodeType::Directory,
-            0,
-            0,
-        );
-        let colored = colorize_node(&node, ColorScheme::Basic);
-        // The colored string should contain the name
-        assert!(colored.to_string().contains("test_dir"));
-    }
-
-    #[test]
-    fn test_colorize_file_by_extension() {
-        let rust_file = FsNode::new(
-            "main.rs".into(),
-            "/test/main.rs".into(),
-            FsNodeType::File,
-            100,
-            0,
-        );
-        let colored = colorize_node(&rust_file, ColorScheme::Basic);
-        assert!(colored.to_string().contains("main.rs"));
-    }
-
-    #[test]
-    fn test_colorize_symlink() {
-        let symlink = FsNode::new(
-            "link".into(),
-            "/test/link".into(),
-            FsNodeType::Symlink,
-            0,
-            0,
-        );
-        let colored = colorize_node(&symlink, ColorScheme::Basic);
-        assert!(colored.to_string().contains("link"));
-    }
-
-    #[test]
-    fn test_no_color_scheme() {
-        let node = FsNode::new(
-            "test.rs".into(),
-            "/test.rs".into(),
-            FsNodeType::File,
-            100,
-            0,
-        );
-        let colored = colorize_node(&node, ColorScheme::None);
-        assert!(colored.to_string().contains("test.rs"));
     }
 }

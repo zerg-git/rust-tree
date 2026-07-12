@@ -1,40 +1,40 @@
-//! Statistics collection from file system trees.
+//! 从文件系统树中收集统计信息。
 
 use std::collections::HashMap;
 use std::time::Instant;
 use crate::core::models::{FsTree, FsNode, TreeStats, FileTypeInfo, FileEntry};
 
-/// Collect statistics from a file system tree.
+/// 从文件系统树中收集统计信息。
 ///
-/// # Arguments
+/// # 参数
 ///
-/// * `tree` - The file system tree to analyze
-/// * `start_time` - When the scan started (for duration calculation)
-/// * `largest_limit` - How many largest files to keep (from `--top-files`)
+/// * `tree` - 待分析的文件系统树
+/// * `start_time` - 扫描开始的时刻（用于计算耗时）
+/// * `largest_limit` - 保留多少个最大文件（来自 `--top-files`）
 ///
-/// # Returns
+/// # 返回
 ///
-/// A `TreeStats` object containing all collected statistics.
+/// 一个包含所有已收集统计信息的 `TreeStats` 对象。
 pub fn collect_stats(tree: &FsTree, start_time: Instant, largest_limit: usize) -> TreeStats {
     let mut stats = TreeStats::new();
 
-    // Collect all files and directories
+    // 收集所有文件和目录
     let mut all_files: Vec<&FsNode> = Vec::new();
     count_nodes(&tree.root, &mut stats, &mut all_files);
 
-    // Group by extension
+    // 按扩展名分组
     stats.files_by_extension = analyze_by_extension(&all_files, stats.total_size);
 
-    // Find largest files
+    // 查找最大的文件
     stats.largest_files = find_largest_files(&all_files, largest_limit);
 
-    // Calculate scan duration
+    // 计算扫描耗时
     stats.scan_duration = start_time.elapsed();
 
     stats
 }
 
-/// Recursively count nodes in the tree.
+/// 递归地统计树中节点的数量。
 fn count_nodes<'a>(node: &'a FsNode, stats: &mut TreeStats, all_files: &mut Vec<&'a FsNode>) {
     match node.node_type {
         crate::core::models::FsNodeType::Directory => {
@@ -57,21 +57,22 @@ fn count_nodes<'a>(node: &'a FsNode, stats: &mut TreeStats, all_files: &mut Vec<
     }
 }
 
-/// Analyze files by extension.
+/// 按扩展名分析文件。
 ///
-/// Returns a HashMap mapping extensions to file type information.
-fn analyze_by_extension(files: &[&FsNode], total_size: u64) -> HashMap<String, FileTypeInfo> {
+/// 返回一个将扩展名映射到文件类型信息的 HashMap。
+#[doc(hidden)]
+pub fn analyze_by_extension(files: &[&FsNode], total_size: u64) -> HashMap<String, FileTypeInfo> {
     let mut by_ext: HashMap<String, (usize, u64)> = HashMap::new();
 
     for file in files {
         let ext = file.extension().unwrap_or_else(|| "(no extension)".to_string());
 
         let entry = by_ext.entry(ext).or_insert((0, 0));
-        entry.0 += 1;  // count
-        entry.1 += file.size;  // total size
+        entry.0 += 1;  // 数量
+        entry.1 += file.size;  // 总大小
     }
 
-    // Convert to FileTypeInfo with percentages
+    // 转换为带百分比的 FileTypeInfo
     by_ext.into_iter()
         .map(|(ext, (count, size))| {
             let percentage = if total_size > 0 {
@@ -92,22 +93,23 @@ fn analyze_by_extension(files: &[&FsNode], total_size: u64) -> HashMap<String, F
         .collect()
 }
 
-/// Find the N largest files.
+/// 查找 N 个最大的文件。
 ///
-/// # Arguments
+/// # 参数
 ///
-/// * `files` - Slice of file nodes to analyze
-/// * `limit` - Maximum number of files to return
+/// * `files` - 待分析的文件节点切片
+/// * `limit` - 返回文件的最大数量
 ///
-/// # Returns
+/// # 返回
 ///
-/// A vector of `FileEntry` objects, sorted by size (largest first).
-fn find_largest_files(files: &[&FsNode], limit: usize) -> Vec<FileEntry> {
+/// 一个由 `FileEntry` 对象组成的向量，按大小排序（最大者在前）。
+#[doc(hidden)]
+pub fn find_largest_files(files: &[&FsNode], limit: usize) -> Vec<FileEntry> {
     if files.is_empty() {
         return Vec::new();
     }
 
-    // Collect all entries
+    // 收集所有条目
     let mut entries: Vec<FileEntry> = files
         .iter()
         .map(|file| FileEntry::new(
@@ -117,30 +119,30 @@ fn find_largest_files(files: &[&FsNode], limit: usize) -> Vec<FileEntry> {
         ))
         .collect();
 
-    // Sort by size (descending)
+    // 按大小排序（降序）
     entries.sort_by_key(|e| std::cmp::Reverse(e.size));
 
-    // Take top N
+    // 取前 N 个
     entries.truncate(limit);
     entries
 }
 
-/// Get a flat list of all file nodes in the tree.
+/// 获取树中所有文件节点的扁平列表。
 ///
-/// # Arguments
+/// # 参数
 ///
-/// * `tree` - The file system tree
+/// * `tree` - 文件系统树
 ///
-/// # Returns
+/// # 返回
 ///
-/// A vector containing all file nodes.
+/// 一个包含所有文件节点的向量。
 pub fn get_all_files(tree: &FsTree) -> Vec<FsNode> {
     let mut files = Vec::new();
     collect_files_recursive(&tree.root, &mut files);
     files
 }
 
-/// Recursively collect file nodes.
+/// 递归地收集文件节点。
 fn collect_files_recursive(node: &FsNode, files: &mut Vec<FsNode>) {
     if node.is_file() {
         files.push(node.clone());
@@ -153,22 +155,22 @@ fn collect_files_recursive(node: &FsNode, files: &mut Vec<FsNode>) {
     }
 }
 
-/// Get a flat list of all directory nodes in the tree.
+/// 获取树中所有目录节点的扁平列表。
 ///
-/// # Arguments
+/// # 参数
 ///
-/// * `tree` - The file system tree
+/// * `tree` - 文件系统树
 ///
-/// # Returns
+/// # 返回
 ///
-/// A vector containing all directory nodes.
+/// 一个包含所有目录节点的向量。
 pub fn get_all_directories(tree: &FsTree) -> Vec<FsNode> {
     let mut dirs = Vec::new();
     collect_dirs_recursive(&tree.root, &mut dirs);
     dirs
 }
 
-/// Recursively collect directory nodes.
+/// 递归地收集目录节点。
 fn collect_dirs_recursive(node: &FsNode, dirs: &mut Vec<FsNode>) {
     if node.is_directory() {
         dirs.push(node.clone());
@@ -181,12 +183,12 @@ fn collect_dirs_recursive(node: &FsNode, dirs: &mut Vec<FsNode>) {
     }
 }
 
-/// Calculate the total number of nodes in the tree.
+/// 计算树中节点的总数。
 pub fn total_node_count(tree: &FsTree) -> usize {
     count_nodes_recursive(&tree.root)
 }
 
-/// Recursively count all nodes.
+/// 递归地统计所有节点。
 fn count_nodes_recursive(node: &FsNode) -> usize {
     let mut count = 1;
 
@@ -197,45 +199,4 @@ fn count_nodes_recursive(node: &FsNode) -> usize {
     }
 
     count
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::core::models::FsNodeType;
-
-    #[test]
-    fn test_find_largest_files() {
-        let files = [
-            FsNode::new("a.txt".into(), "/a.txt".into(), FsNodeType::File, 100, 0),
-            FsNode::new("b.txt".into(), "/b.txt".into(), FsNodeType::File, 500, 0),
-            FsNode::new("c.txt".into(), "/c.txt".into(), FsNodeType::File, 200, 0),
-            FsNode::new("d.txt".into(), "/d.txt".into(), FsNodeType::File, 1000, 0),
-            FsNode::new("e.txt".into(), "/e.txt".into(), FsNodeType::File, 50, 0),
-        ];
-
-        let refs: Vec<&FsNode> = files.iter().collect();
-        let largest = find_largest_files(&refs, 3);
-
-        assert_eq!(largest.len(), 3);
-        assert_eq!(largest[0].size, 1000);
-        assert_eq!(largest[1].size, 500);
-        assert_eq!(largest[2].size, 200);
-    }
-
-    #[test]
-    fn test_analyze_by_extension() {
-        let files = [
-            FsNode::new("file.rs".into(), "/file.rs".into(), FsNodeType::File, 100, 0),
-            FsNode::new("doc.md".into(), "/doc.md".into(), FsNodeType::File, 50, 0),
-            FsNode::new("main.rs".into(), "/main.rs".into(), FsNodeType::File, 200, 0),
-        ];
-
-        let refs: Vec<&FsNode> = files.iter().collect();
-        let by_ext = analyze_by_extension(&refs, 350);
-
-        assert_eq!(by_ext.len(), 2);
-        assert_eq!(by_ext.get(".rs").unwrap().count, 2);
-        assert_eq!(by_ext.get(".md").unwrap().count, 1);
-    }
 }

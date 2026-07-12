@@ -1,23 +1,23 @@
-//! JSON output formatter.
+//! JSON 输出格式化器。
 
 use serde_json::json;
 use crate::core::models::{FsTree, TreeStats, TreeError};
 
-/// Format a file tree and its statistics as JSON.
+/// 将文件树及其统计信息格式化为 JSON。
 ///
-/// # Arguments
+/// # 参数
 ///
-/// * `tree` - The file system tree to format
-/// * `stats` - Statistics to include in the output
-/// * `pretty` - Whether to pretty-print the JSON
+/// * `tree` - 要格式化的文件系统树
+/// * `stats` - 要包含在输出中的统计信息
+/// * `pretty` - 是否美化打印 JSON
 ///
-/// # Returns
+/// # 返回
 ///
-/// A JSON string representing the tree and statistics.
+/// 表示树和统计信息的 JSON 字符串。
 ///
-/// # Errors
+/// # 错误
 ///
-/// Returns `TreeError::Json` if serialization fails.
+/// 如果序列化失败，返回 `TreeError::Json`。
 pub fn format_json(tree: &FsTree, stats: &TreeStats, pretty: bool) -> Result<String, TreeError> {
     let output = json!({
         "tree": {
@@ -42,20 +42,20 @@ pub fn format_json(tree: &FsTree, stats: &TreeStats, pretty: bool) -> Result<Str
     }
 }
 
-/// Format only the tree structure as JSON (without statistics).
+/// 仅将树结构格式化为 JSON（不含统计信息）。
 ///
-/// # Arguments
+/// # 参数
 ///
-/// * `tree` - The file system tree to format
-/// * `pretty` - Whether to pretty-print the JSON
+/// * `tree` - 要格式化的文件系统树
+/// * `pretty` - 是否美化打印 JSON
 ///
-/// # Returns
+/// # 返回
 ///
-/// A JSON string representing the tree structure only.
+/// 仅表示树结构的 JSON 字符串。
 ///
-/// # Errors
+/// # 错误
 ///
-/// Returns `TreeError::Json` if serialization fails.
+/// 如果序列化失败，返回 `TreeError::Json`。
 pub fn format_tree_only(tree: &FsTree, pretty: bool) -> Result<String, TreeError> {
     if pretty {
         serde_json::to_string_pretty(&tree.root).map_err(TreeError::from)
@@ -64,72 +64,24 @@ pub fn format_tree_only(tree: &FsTree, pretty: bool) -> Result<String, TreeError
     }
 }
 
-/// Format only the statistics as JSON.
+/// 仅将统计信息格式化为 JSON。
 ///
-/// # Arguments
+/// # 参数
 ///
-/// * `stats` - Statistics to format
-/// * `pretty` - Whether to pretty-print the JSON
+/// * `stats` - 要格式化的统计信息
+/// * `pretty` - 是否美化打印 JSON
 ///
-/// # Returns
+/// # 返回
 ///
-/// A JSON string representing the statistics only.
+/// 仅表示统计信息的 JSON 字符串。
 ///
-/// # Errors
+/// # 错误
 ///
-/// Returns `TreeError::Json` if serialization fails.
+/// 如果序列化失败，返回 `TreeError::Json`。
 pub fn format_stats_only(stats: &TreeStats, pretty: bool) -> Result<String, TreeError> {
     if pretty {
         serde_json::to_string_pretty(&stats).map_err(TreeError::from)
     } else {
         serde_json::to_string(&stats).map_err(TreeError::from)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::core::models::{FsNode, FsNodeType};
-    use std::time::Duration;
-
-    #[test]
-    fn test_format_json() {
-        let root = FsNode::new(
-            "test".into(),
-            "/test".into(),
-            FsNodeType::Directory,
-            0,
-            0,
-        );
-        let tree = FsTree::new(root, 0);
-        let stats = TreeStats {
-            total_files: 10,
-            total_directories: 2,
-            total_symlinks: 0,
-            total_size: 1024,
-            files_by_extension: Default::default(),
-            largest_files: vec![],
-            scan_duration: Duration::from_millis(100),
-        };
-
-        let json = format_json(&tree, &stats, true).unwrap();
-
-        assert!(json.contains("\"total_files\": 10"));
-        assert!(json.contains("\"total_directories\": 2"));
-    }
-
-    #[test]
-    fn test_format_tree_only() {
-        let root = FsNode::new(
-            "test".into(),
-            "/test".into(),
-            FsNodeType::Directory,
-            0,
-            0,
-        );
-        let tree = FsTree::new(root, 0);
-
-        let json = format_tree_only(&tree, true).unwrap();
-        assert!(json.contains("\"name\": \"test\""));
     }
 }

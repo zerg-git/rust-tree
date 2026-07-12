@@ -1,32 +1,32 @@
-//! Table-style output formatter for statistics.
+//! 统计信息的表格输出格式化器。
 
 use comfy_table::{Table, Attribute, Color, Cell, presets::UTF8_FULL, modifiers::UTF8_ROUND_CORNERS};
 use humansize::format_size;
 use crate::core::models::TreeStats;
 
-/// Format statistics as a table.
+/// 将统计信息格式化为表格。
 ///
-/// # Arguments
+/// # 参数
 ///
-/// * `stats` - Statistics to format
+/// * `stats` - 要格式化的统计信息
 ///
-/// # Returns
+/// # 返回
 ///
-/// A formatted string containing one or more tables.
+/// 包含一个或多个表格的格式化字符串。
 pub fn format_table(stats: &TreeStats) -> String {
     let mut output = String::new();
 
-    // Overview table
+    // 概览表
     output.push_str(&format_overview(stats));
     output.push_str("\n\n");
 
-    // Files by extension table
+    // 按扩展名分组的文件表
     if !stats.files_by_extension.is_empty() {
         output.push_str(&format_extension_table(stats));
         output.push_str("\n\n");
     }
 
-    // Largest files table
+    // 最大文件表
     if !stats.largest_files.is_empty() {
         output.push_str(&format_largest_files_table(stats));
     }
@@ -34,7 +34,7 @@ pub fn format_table(stats: &TreeStats) -> String {
     output
 }
 
-/// Format the overview statistics table.
+/// 格式化统计概览表。
 fn format_overview(stats: &TreeStats) -> String {
     let mut table = Table::new();
     table
@@ -74,7 +74,7 @@ fn format_overview(stats: &TreeStats) -> String {
     table.to_string()
 }
 
-/// Format the files-by-extension table.
+/// 格式化按扩展名分组的文件表。
 fn format_extension_table(stats: &TreeStats) -> String {
     let mut table = Table::new();
     table
@@ -95,7 +95,7 @@ fn format_extension_table(stats: &TreeStats) -> String {
                 .fg(Color::Cyan),
         ]);
 
-    // Sort by count (descending)
+    // 按数量排序（降序）
     let mut extensions: Vec<_> = stats.files_by_extension.iter().collect();
     extensions.sort_by_key(|e| std::cmp::Reverse(e.1.count));
 
@@ -108,14 +108,14 @@ fn format_extension_table(stats: &TreeStats) -> String {
         ]);
     }
 
-    // Add title
+    // 添加标题
     let mut output = String::new();
     output.push_str("Files by Extension\n");
     output.push_str(&table.to_string());
     output
 }
 
-/// Format the largest files table.
+/// 格式化最大文件表。
 fn format_largest_files_table(stats: &TreeStats) -> String {
     let mut table = Table::new();
     table
@@ -137,14 +137,14 @@ fn format_largest_files_table(stats: &TreeStats) -> String {
         ]);
     }
 
-    // Add title
+    // 添加标题
     let mut output = String::new();
     output.push_str(&format!("Largest Files (showing {})\n", stats.largest_files.len()));
     output.push_str(&table.to_string());
     output
 }
 
-/// Format a size in bytes to a human-readable string.
+/// 将字节数格式化为人类可读的字符串。
 fn format_size_impl(bytes: u64) -> String {
     if bytes == 0 {
         "0 B".to_string()
@@ -153,8 +153,9 @@ fn format_size_impl(bytes: u64) -> String {
     }
 }
 
-/// Format a duration to a human-readable string.
-fn format_duration(duration: std::time::Duration) -> String {
+/// 将时长格式化为人类可读的字符串。
+#[doc(hidden)]
+pub fn format_duration(duration: std::time::Duration) -> String {
     let ms = duration.as_millis();
     if ms < 1000 {
         format!("{}ms", ms)
@@ -163,15 +164,15 @@ fn format_duration(duration: std::time::Duration) -> String {
     }
 }
 
-/// Format statistics in a compact, single-line format.
+/// 以精简的单行格式格式化统计信息。
 ///
-/// # Arguments
+/// # 参数
 ///
-/// * `stats` - Statistics to format
+/// * `stats` - 要格式化的统计信息
 ///
-/// # Returns
+/// # 返回
 ///
-/// A compact single-line string summarizing the statistics.
+/// 汇总统计信息的精简单行字符串。
 pub fn format_compact(stats: &TreeStats) -> String {
     format!(
         "{} files, {} directories, {} total",
@@ -179,53 +180,4 @@ pub fn format_compact(stats: &TreeStats) -> String {
         stats.total_directories,
         format_size_impl(stats.total_size)
     )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::collections::HashMap;
-    use std::time::Duration;
-
-    #[test]
-    fn test_format_table() {
-        let stats = TreeStats {
-            total_files: 42,
-            total_directories: 8,
-            total_symlinks: 1,
-            total_size: 1024 * 1024,
-            files_by_extension: HashMap::new(),
-            largest_files: vec![],
-            scan_duration: Duration::from_millis(150),
-        };
-
-        let table = format_table(&stats);
-        assert!(table.contains("42"));
-        assert!(table.contains("8"));
-        // humansize uses "MiB" instead of "MB"
-        assert!(table.contains("M") || table.contains("m"));
-    }
-
-    #[test]
-    fn test_format_compact() {
-        let stats = TreeStats {
-            total_files: 10,
-            total_directories: 2,
-            total_symlinks: 0,
-            total_size: 2048,
-            files_by_extension: HashMap::new(),
-            largest_files: vec![],
-            scan_duration: Duration::from_millis(50),
-        };
-
-        let compact = format_compact(&stats);
-        assert!(compact.contains("10 files"));
-        assert!(compact.contains("2 directories"));
-    }
-
-    #[test]
-    fn test_format_duration() {
-        assert_eq!(format_duration(Duration::from_millis(500)), "500ms");
-        assert_eq!(format_duration(Duration::from_millis(1500)), "1.5s");
-    }
 }

@@ -1,51 +1,51 @@
-//! Core data structures for representing file system trees and statistics.
+//! 表示文件系统树和统计信息的核心数据结构。
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
 use serde::{Serialize, Deserialize};
 
-/// File system node type classification.
+/// 文件系统节点类型分类。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FsNodeType {
-    /// Regular file
+    /// 常规文件
     #[serde(rename = "file")]
     File,
-    /// Directory
+    /// 目录
     #[serde(rename = "directory")]
     Directory,
-    /// Symbolic link
+    /// 符号链接
     #[serde(rename = "symlink")]
     Symlink,
 }
 
-/// A node in the file system tree.
+/// 文件系统树中的一个节点。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FsNode {
-    /// Name of the file or directory
+    /// 文件或目录的名称
     pub name: String,
 
-    /// Full path to the file or directory
+    /// 文件或目录的完整路径
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<PathBuf>,
 
-    /// Type of the file system node
+    /// 文件系统节点的类型
     #[serde(rename = "type")]
     pub node_type: FsNodeType,
 
-    /// Size in bytes (0 for directories)
+    /// 字节大小（目录为 0）
     pub size: u64,
 
-    /// Depth in the tree (0 for root)
+    /// 在树中的深度（根节点为 0）
     pub depth: usize,
 
-    /// Child nodes (only for directories)
+    /// 子节点（仅用于目录）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub children: Option<Vec<FsNode>>,
 }
 
 impl FsNode {
-    /// Create a new file system node.
+    /// 创建一个新的文件系统节点。
     pub fn new(
         name: String,
         path: PathBuf,
@@ -63,7 +63,7 @@ impl FsNode {
         }
     }
 
-    /// Create a new directory node with children.
+    /// 创建一个带子节点的新目录节点。
     pub fn new_directory(
         name: String,
         path: PathBuf,
@@ -80,22 +80,22 @@ impl FsNode {
         }
     }
 
-    /// Check if this node is a directory.
+    /// 检查该节点是否为目录。
     pub fn is_directory(&self) -> bool {
         self.node_type == FsNodeType::Directory
     }
 
-    /// Check if this node is a file.
+    /// 检查该节点是否为文件。
     pub fn is_file(&self) -> bool {
         self.node_type == FsNodeType::File
     }
 
-    /// Check if this node is a symlink.
+    /// 检查该节点是否为符号链接。
     pub fn is_symlink(&self) -> bool {
         self.node_type == FsNodeType::Symlink
     }
 
-    /// Get the file extension (if any).
+    /// 获取文件扩展名（如果有）。
     pub fn extension(&self) -> Option<String> {
         if self.is_directory() {
             return None;
@@ -108,86 +108,86 @@ impl FsNode {
     }
 }
 
-/// A file system tree representation.
+/// 文件系统树的表示。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FsTree {
-    /// Root node of the tree
+    /// 树的根节点
     pub root: FsNode,
 
-    /// Maximum depth of the tree
+    /// 树的最大深度
     pub max_depth: usize,
 }
 
 impl FsTree {
-    /// Create a new file system tree.
+    /// 创建一棵新的文件系统树。
     pub fn new(root: FsNode, max_depth: usize) -> Self {
         Self { root, max_depth }
     }
 }
 
-/// Information about a specific file type.
+/// 关于特定文件类型的信息。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileTypeInfo {
-    /// File extension (e.g., ".rs", ".txt")
+    /// 文件扩展名（例如 ".rs"、".txt"）
     pub extension: String,
 
-    /// Number of files with this extension
+    /// 具有该扩展名的文件数量
     pub count: usize,
 
-    /// Total size of all files with this extension
+    /// 具有该扩展名的所有文件的总大小
     pub total_size: u64,
 
-    /// Percentage of total size
+    /// 占总大小的百分比
     pub percentage: f64,
 }
 
-/// A file entry for sorted listings.
+/// 用于排序清单的文件条目。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct FileEntry {
-    /// File name
+    /// 文件名
     pub name: String,
 
-    /// File path
+    /// 文件路径
     pub path: PathBuf,
 
-    /// File size in bytes
+    /// 文件字节大小
     pub size: u64,
 }
 
 impl FileEntry {
-    /// Create a new file entry.
+    /// 创建一个新的文件条目。
     pub fn new(name: String, path: PathBuf, size: u64) -> Self {
         Self { name, path, size }
     }
 }
 
-/// Statistics collected from scanning a directory tree.
+/// 扫描目录树所收集的统计信息。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TreeStats {
-    /// Total number of files
+    /// 文件总数
     pub total_files: usize,
 
-    /// Total number of directories
+    /// 目录总数
     pub total_directories: usize,
 
-    /// Total number of symbolic links
+    /// 符号链接总数
     pub total_symlinks: usize,
 
-    /// Total size of all files in bytes
+    /// 所有文件的总字节大小
     pub total_size: u64,
 
-    /// Files grouped by extension
+    /// 按扩展名分组的文件
     pub files_by_extension: HashMap<String, FileTypeInfo>,
 
-    /// Largest files (top N)
+    /// 最大的文件（前 N 个）
     pub largest_files: Vec<FileEntry>,
 
-    /// Time taken to scan the directory
+    /// 扫描目录所花费的时间
     pub scan_duration: Duration,
 }
 
 impl TreeStats {
-    /// Create a new empty statistics object.
+    /// 创建一个新的空统计信息对象。
     pub fn new() -> Self {
         Self {
             total_files: 0,
@@ -207,35 +207,35 @@ impl Default for TreeStats {
     }
 }
 
-/// Error type for tree operations.
+/// 树操作的错误类型。
 #[derive(Debug, thiserror::Error)]
 pub enum TreeError {
-    /// IO error occurred
+    /// 发生 IO 错误
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
-    /// Path does not exist
+    /// 路径不存在
     #[error("Path does not exist: {0}")]
     PathNotFound(PathBuf),
 
-    /// Not a directory
+    /// 不是目录
     #[error("Not a directory: {0}")]
     NotADirectory(PathBuf),
 
-    /// Permission denied
+    /// 权限被拒绝
     #[error("Permission denied: {0}")]
     PermissionDenied(PathBuf),
 
-    /// JSON serialization error
+    /// JSON 序列化错误
     #[error("JSON error: {0}")]
     Json(String),
 
-    /// Generic error message
+    /// 通用错误消息
     #[error("{0}")]
     Other(String),
 }
 
-// Convert serde_json error to our TreeError
+// 将 serde_json 错误转换为我们自己的 TreeError
 impl From<serde_json::Error> for TreeError {
     fn from(err: serde_json::Error) -> Self {
         TreeError::Json(err.to_string())

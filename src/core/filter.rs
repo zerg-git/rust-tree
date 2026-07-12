@@ -1,47 +1,46 @@
-//! Pattern filtering for directory traversal.
+//! 目录遍历的模式过滤。
 
 use glob::Pattern;
 use std::path::Path;
 
-/// Filter configuration.
+/// 过滤器配置。
 #[derive(Debug, Clone, Default)]
 pub struct FilterConfig {
-    /// Patterns to exclude
+    /// 要排除的模式
     pub exclude_patterns: Vec<Pattern>,
-    /// Pattern to include only (if set, only matching paths are included)
+    /// 仅包含的模式（若设置，则只包含匹配的路径）
     pub include_pattern: Option<Pattern>,
-    /// Exclude hidden files
+    /// 排除隐藏文件
     pub exclude_hidden: bool,
 }
 
 impl FilterConfig {
-    /// Create a new filter config.
+    /// 创建一个新的过滤器配置。
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Add an exclude pattern.
+    /// 添加一个排除模式。
     pub fn add_exclude(&mut self, pattern: &str) -> Result<(), String> {
         Pattern::new(pattern)
             .map(|p| self.exclude_patterns.push(p))
             .map_err(|e| e.to_string())
     }
 
-    /// Set include pattern.
+    /// 设置包含模式。
     pub fn set_include(&mut self, pattern: &str) -> Result<(), String> {
         Pattern::new(pattern)
             .map(|p| self.include_pattern = Some(p))
             .map_err(|e| e.to_string())
     }
 
-    /// Check if a path should be excluded.
+    /// 检查某个路径是否应被排除。
     ///
-    /// `is_dir` indicates whether the path is a directory. The `include_pattern`
-    /// only filters files: directories always descend (unless hit by an exclude
-    /// pattern or the hidden rule), otherwise an `--include-only "*.rs"` would
-    /// prune every subdirectory and yield nothing.
+    /// `is_dir` 指示该路径是否为目录。`include_pattern` 只过滤文件：
+    /// 目录总是会下降（除非命中排除模式或隐藏规则），否则一个
+    /// `--include-only "*.rs"` 会剪除每个子目录，从而什么都得不到。
     pub fn should_exclude(&self, path: &Path, is_dir: bool) -> bool {
-        // Check hidden files
+        // 检查隐藏文件
         if self.exclude_hidden {
             if let Some(file_name) = path.file_name() {
                 if let Some(name_str) = file_name.to_str() {
@@ -52,12 +51,12 @@ impl FilterConfig {
             }
         }
 
-        // Check exclude patterns (apply to both files and directories)
+        // 检查排除模式（同时作用于文件和目录）
         for pattern in &self.exclude_patterns {
             if pattern.matches_path(path) {
                 return true;
             }
-            // Also check against file name only
+            // 同时仅对文件名进行检查
             if let Some(file_name) = path.file_name() {
                 if let Some(name_str) = file_name.to_str() {
                     if pattern.matches(name_str) {
@@ -67,8 +66,8 @@ impl FilterConfig {
             }
         }
 
-        // Check include pattern — files only. Directories always descend so
-        // matching files deeper in the tree remain reachable.
+        // 检查包含模式——仅对文件。目录总是会下降，这样树更深处
+        // 匹配的文件仍然可达。
         if !is_dir {
             if let Some(ref pattern) = self.include_pattern {
                 let matches_path = pattern.matches_path(path);
@@ -87,107 +86,25 @@ impl FilterConfig {
     }
 }
 
-/// Predefined common exclude patterns.
+/// 预定义的常用排除模式。
 pub mod common_excludes {
-    /// Common exclude patterns for Rust projects.
+    /// Rust 项目的常用排除模式。
     pub fn rust_patterns() -> Vec<&'static str> {
         vec![".git", "target", "*.rlib", "*.rmeta"]
     }
 
-    /// Common exclude patterns for Node.js projects.
+    /// Node.js 项目的常用排除模式。
     pub fn nodejs_patterns() -> Vec<&'static str> {
         vec![".git", "node_modules", "package-lock.json", "yarn.lock", "*.log"]
     }
 
-    /// Common exclude patterns for Python projects.
+    /// Python 项目的常用排除模式。
     pub fn python_patterns() -> Vec<&'static str> {
         vec![".git", "__pycache__", "*.pyc", ".venv", "venv", "*.egg-info", ".pytest_cache"]
     }
 
-    /// Common exclude patterns for general development.
+    /// 通用开发的常用排除模式。
     pub fn common_patterns() -> Vec<&'static str> {
         vec![".git", ".svn", ".hg", "*.log", "*.tmp", "*.bak", "*.swp", "*~"]
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::path::Path;
-    use super::common_excludes::rust_patterns;
-
-    #[test]
-    fn test_filter_config_default() {
-        let config = FilterConfig::default();
-        assert!(!config.exclude_hidden);
-        assert!(config.exclude_patterns.is_empty());
-        assert!(config.include_pattern.is_none());
-    }
-
-    #[test]
-    fn test_add_exclude_pattern() {
-        let mut config = FilterConfig::new();
-        assert!(config.add_exclude("*.log").is_ok());
-        assert_eq!(config.exclude_patterns.len(), 1);
-    }
-
-    #[test]
-    fn test_set_include_pattern() {
-        let mut config = FilterConfig::new();
-        assert!(config.set_include("*.rs").is_ok());
-        assert!(config.include_pattern.is_some());
-    }
-
-    #[test]
-    fn test_should_exclude_hidden() {
-        let config = FilterConfig {
-            exclude_hidden: true,
-            ..Default::default()
-        };
-        assert!(config.should_exclude(Path::new(".git"), true));
-        assert!(config.should_exclude(Path::new(".hidden"), false));
-        assert!(!config.should_exclude(Path::new("visible"), false));
-    }
-
-    #[test]
-    fn test_should_exclude_pattern() {
-        let mut config = FilterConfig::new();
-        config.add_exclude("*.log").unwrap();
-        assert!(config.should_exclude(Path::new("test.log"), false));
-        assert!(!config.should_exclude(Path::new("test.txt"), false));
-    }
-
-    #[test]
-    fn test_include_only_pattern() {
-        let mut config = FilterConfig::new();
-        config.set_include("*.rs").unwrap();
-        assert!(!config.should_exclude(Path::new("main.rs"), false));
-        assert!(config.should_exclude(Path::new("main.py"), false));
-    }
-
-    #[test]
-    fn test_include_only_does_not_prune_directories() {
-        // A directory named "src" must still descend even though it does not
-        // match "*.rs", so that main.rs inside it stays reachable.
-        let mut config = FilterConfig::new();
-        config.set_include("*.rs").unwrap();
-        assert!(!config.should_exclude(Path::new("src"), true));
-        assert!(!config.should_exclude(Path::new("main.rs"), false));
-        assert!(config.should_exclude(Path::new("main.py"), false));
-    }
-
-    #[test]
-    fn test_exclude_pattern_still_applies_to_directories() {
-        let mut config = FilterConfig::new();
-        config.add_exclude("target").unwrap();
-        assert!(config.should_exclude(Path::new("target"), true));
-        assert!(!config.should_exclude(Path::new("src"), true));
-    }
-
-    #[test]
-    fn test_rust_patterns() {
-        let patterns = rust_patterns();
-        assert!(patterns.contains(&".git"));
-        assert!(patterns.contains(&"target"));
     }
 }

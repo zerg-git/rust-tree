@@ -1,9 +1,8 @@
-//! rust-tree - A fast directory tree visualization tool.
+//! rust-tree - 一个快速的目录树可视化工具。
 //!
-//! This library provides functionality for traversing directory structures,
-//! collecting statistics, and formatting output in various styles.
+//! 本库提供了遍历目录结构、收集统计信息，并以多种风格格式化输出的功能。
 //!
-//! # Example
+//! # 示例
 //!
 //! ```no_run
 //! use rust_tree::{Config, run};
@@ -21,7 +20,7 @@ pub mod config;
 pub mod core;
 pub mod formatters;
 
-// Re-export commonly used types
+// 重新导出常用类型
 pub use config::{Config, OutputFormat, SortBy, ColorMode, ColorScheme};
 pub use core::{
     models::{FsNode, FsTree, FsNodeType, TreeStats, FileTypeInfo, FileEntry, TreeError},
@@ -34,22 +33,22 @@ use std::io::{self, Write};
 use std::time::Instant;
 use crate::core::progress::{create_progress_bar, finish_progress, update_progress, ProgressConfig};
 
-/// Run the rust-tree tool with the given configuration.
+/// 使用给定配置运行 rust-tree 工具。
 ///
-/// This is the main entry point for the library. It performs the following steps:
-/// 1. Walk the directory tree
-/// 2. Collect statistics
-/// 3. Format and output the results
+/// 这是本库的主入口。它执行以下步骤：
+/// 1. 遍历目录树
+/// 2. 收集统计信息
+/// 3. 格式化并输出结果
 ///
-/// # Errors
+/// # 错误
 ///
-/// Returns `TreeError` if directory traversal fails or output formatting fails.
+/// 如果目录遍历失败或输出格式化失败，则返回 `TreeError`。
 pub fn run(config: Config) -> Result<(), TreeError> {
     let start_time = Instant::now();
 
-    // Streaming emits nodes as they are visited and never materializes the tree,
-    // so statistics (which need the whole tree) cannot be computed. Reject the
-    // combination loudly instead of silently dropping the stats.
+    // 流式模式在访问节点时即输出，并不会将整棵树具体化，
+    // 因此统计信息（需要完整树）无法计算。这里显式拒绝
+    // 该组合，而不是静默丢弃统计信息。
     if config.streaming && config.should_show_stats() {
         return Err(TreeError::Other(
             "streaming mode does not support statistics; drop --stats or --streaming \
@@ -58,28 +57,28 @@ pub fn run(config: Config) -> Result<(), TreeError> {
         ));
     }
 
-    // Check if streaming mode is enabled
+    // 检查是否启用了流式模式
     if config.streaming {
         return run_streaming(config);
     }
 
-    // Traditional mode
-    // Create progress bar if requested
+    // 传统模式
+    // 如有需要则创建进度条
     let progress_config = ProgressConfig {
         enabled: config.show_progress,
         ..Default::default()
     };
     let progress = create_progress_bar(&progress_config);
 
-    // Walk the directory
+    // 遍历目录
     update_progress(&progress, &format!("Scanning: {}", config.path.display()));
     let tree = walk_directory(&config.path, &config.to_walk_config())?;
     finish_progress(&progress, "Scan complete");
 
-    // Collect statistics
+    // 收集统计信息
     let stats = collect_stats(&tree, start_time, config.top_files_count());
 
-    // Format output based on selected format
+    // 根据所选格式格式化输出
     let output = match config.format {
         OutputFormat::Tree => {
             let mut result = format_tree(
@@ -89,7 +88,7 @@ pub fn run(config: Config) -> Result<(), TreeError> {
                 config.color_scheme,
             );
 
-            // Add statistics if requested
+            // 如有需要则追加统计信息
             if config.show_stats {
                 result.push_str("\n\n");
                 result.push_str(&crate::formatters::table::format_compact(&stats));
@@ -106,20 +105,20 @@ pub fn run(config: Config) -> Result<(), TreeError> {
         }
     };
 
-    // Print output
+    // 打印输出
     print!("{}", output);
     io::stdout().flush().map_err(|e| TreeError::Other(e.to_string()))?;
 
     Ok(())
 }
 
-/// Run in streaming mode (peak memory O(widest directory)).
+/// 以流式模式运行（峰值内存为 O(最宽目录的宽度)）。
 fn run_streaming(config: Config) -> Result<(), TreeError> {
     use crate::formatters::streaming_tree::format_tree_streaming;
 
     let walk_config = config.to_walk_config();
 
-    // Use stdout directly for streaming
+    // 流式模式直接使用 stdout
     let mut stdout = io::stdout().lock();
 
     format_tree_streaming(
@@ -136,7 +135,7 @@ fn run_streaming(config: Config) -> Result<(), TreeError> {
     Ok(())
 }
 
-/// Default implementation for creating a basic Config.
+/// 用于创建基础 Config 的默认实现。
 impl Default for Config {
     fn default() -> Self {
         Config {

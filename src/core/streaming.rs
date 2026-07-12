@@ -1,20 +1,19 @@
-//! Single traversal core.
+//! 统一的遍历核心。
 //!
-//! `walk_core` is the one place directory traversal, sorting, and filtering
-//! live. It emits a depth-first, pre-order stream of `StreamNode`s via a
-//! callback (root's direct children at depth 1). Both the streaming formatter
-//! and the in-memory `FsTree` builder consume this stream, so there is no
-//! second traversal implementation to keep in sync.
+//! `walk_core` 是目录遍历、排序和过滤的唯一实现所在地。它通过回调
+//! 输出一个深度优先、先序遍历的 `StreamNode` 流（根节点的直接子节点
+//! 位于深度 1）。流式格式化器和内存中的 `FsTree` 构建器都消费这个流，
+//! 因此不存在需要保持同步的第二套遍历实现。
 //!
-//! Peak memory is O(widest directory): only one directory's entries are
-//! buffered at a time for sorting — not the whole tree.
+//! 峰值内存为 O(最宽目录)：每次只为排序而缓冲单个目录的条目——而非
+//! 整棵树。
 
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 use crate::core::models::{FsNodeType, TreeError};
 use crate::core::walker::{SortField, WalkConfig};
 
-/// A node emitted by the traversal core.
+/// 遍历核心输出的节点。
 #[derive(Debug, Clone)]
 pub struct StreamNode {
     pub name: String,
@@ -22,11 +21,11 @@ pub struct StreamNode {
     pub node_type: FsNodeType,
     pub size: u64,
     pub depth: usize,
-    /// True if this is the last child of its parent (for tree drawing).
+    /// 若该节点是其父节点的最后一个子节点则为真（用于绘制树）。
     pub is_last: bool,
 }
 
-/// A directory entry after a single stat, reused for sorting and emission.
+/// 经过一次 stat 调用后的目录条目，在排序和输出时被复用。
 struct Scanned {
     name: String,
     path: PathBuf,
@@ -34,11 +33,10 @@ struct Scanned {
     size: u64,
 }
 
-/// Walk a directory tree, emitting each descendant node exactly once.
+/// 遍历目录树，每个后代节点只输出一次。
 ///
-/// The callback receives nodes in depth-first pre-order. Root's direct
-/// children are at depth 1; the root itself is not emitted (callers render or
-/// build it themselves).
+/// 回调按深度优先的先序顺序接收节点。根节点的直接子节点位于深度 1；
+/// 根节点本身不会被输出（由调用者自行渲染或构建）。
 pub fn walk_core<F>(root: &Path, config: &WalkConfig, mut callback: F) -> Result<(), TreeError>
 where
     F: FnMut(&StreamNode),
@@ -56,13 +54,13 @@ where
     Ok(())
 }
 
-/// Recursively emit the children of `dir` at the given `depth`.
+/// 递归地输出 `dir` 在指定 `depth` 处的子节点。
 fn walk_children<F>(dir: &Path, depth: usize, config: &WalkConfig, callback: &mut F)
 where
     F: FnMut(&StreamNode),
 {
-    // Depth limit: children at depth D are emitted iff D <= max_depth. This
-    // matches `depth >= max_depth => no children` on the parent side.
+    // 深度限制：深度 D 处的子节点当且仅当 D <= max_depth 时才会被输出。这与
+    // 父节点侧的 `depth >= max_depth => 无子节点` 相对应。
     if config.max_depth > 0 && depth > config.max_depth {
         return;
     }
@@ -81,7 +79,7 @@ where
             Err(_) => continue,
         };
 
-        // file_type() is cached from readdir — no extra syscall.
+        // file_type() 由 readdir 缓存——无需额外系统调用。
         let file_type = entry.file_type();
         let is_dir = file_type.is_dir();
 
@@ -97,7 +95,7 @@ where
             FsNodeType::File
         };
 
-        // Only files need a size, so only files pay for a stat.
+        // 只有文件需要大小，因此只有文件才付出一次 stat 调用的代价。
         let size = if node_type == FsNodeType::File {
             entry.metadata().map(|m| m.len()).unwrap_or(0)
         } else {
@@ -135,7 +133,7 @@ where
     }
 }
 
-/// File extension (without the dot) used for type sorting.
+/// 用于按类型排序的文件扩展名（不含点号）。
 fn ext_of(name: &str) -> &str {
     match name.rfind('.') {
         Some(idx) if idx > 0 => &name[idx + 1..],
@@ -143,7 +141,7 @@ fn ext_of(name: &str) -> &str {
     }
 }
 
-/// Sort scanned entries: directories first, then by the configured field.
+/// 对扫描到的条目排序：目录在前，然后按配置的字段排序。
 fn sort_scanned(entries: &mut [Scanned], config: &WalkConfig) {
     let dir_first = |a: &Scanned, b: &Scanned| {
         let a_dir = a.node_type == FsNodeType::Directory;
@@ -173,51 +171,5 @@ fn sort_scanned(entries: &mut [Scanned], config: &WalkConfig) {
 
     if config.reverse {
         entries.reverse();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    #[test]
-    fn test_walk_core_empty() {
-        let temp = TempDir::new().unwrap();
-        let config = WalkConfig::default();
-
-        let mut count = 0;
-        let result = walk_core(temp.path(), &config, |_| count += 1);
-        assert!(result.is_ok());
-        assert_eq!(count, 0);
-    }
-
-    #[test]
-    fn test_walk_core_children_start_at_depth_one() {
-        let temp = TempDir::new().unwrap();
-        std::fs::create_dir(temp.path().join("sub")).unwrap();
-        std::fs::write(temp.path().join("sub/inner.txt"), b"hi").unwrap();
-
-        let config = WalkConfig::default();
-        let mut depths = Vec::new();
-        walk_core(temp.path(), &config, |n| depths.push((n.name.clone(), n.depth))).unwrap();
-
-        assert!(depths.contains(&("sub".to_string(), 1)));
-        assert!(depths.contains(&("inner.txt".to_string(), 2)));
-    }
-
-    #[test]
-    fn test_walk_core_max_depth_matches_walker() {
-        let temp = TempDir::new().unwrap();
-        std::fs::create_dir(temp.path().join("sub")).unwrap();
-        std::fs::write(temp.path().join("sub/inner.txt"), b"hi").unwrap();
-
-        // max_depth 1 => only depth-1 nodes, no grandchildren.
-        let config = WalkConfig { max_depth: 1, ..Default::default() };
-        let mut names = Vec::new();
-        walk_core(temp.path(), &config, |n| names.push(n.name.clone())).unwrap();
-
-        assert!(names.contains(&"sub".to_string()));
-        assert!(!names.contains(&"inner.txt".to_string()));
     }
 }

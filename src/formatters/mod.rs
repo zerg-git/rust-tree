@@ -1,4 +1,4 @@
-//! Output formatters for different display formats.
+//! 不同显示格式的输出格式化器。
 
 pub mod tree;
 pub mod json;

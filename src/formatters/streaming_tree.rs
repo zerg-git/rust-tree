@@ -1,4 +1,4 @@
-//! Streaming tree formatter for memory-efficient output.
+//! 用于内存高效输出的流式树格式化器。
 
 use std::io::Write;
 use crate::core::streaming::{walk_core, StreamNode};
@@ -7,7 +7,7 @@ use crate::config::{ColorMode, ColorScheme};
 use crate::config::color::should_use_colors;
 use humansize::format_size;
 
-/// Format a tree using the streaming core (peak memory O(widest directory)).
+/// 使用流式核心格式化树（峰值内存为 O(最宽目录的宽度)）。
 pub fn format_tree_streaming<W: Write>(
     root: &std::path::Path,
     writer: &mut W,
@@ -18,7 +18,7 @@ pub fn format_tree_streaming<W: Write>(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let use_color = should_use_colors(color_mode);
 
-    // Emit root directory first
+    // 先输出根目录
     let root_name = root.file_name()
         .and_then(|n| n.to_str())
         .unwrap_or(".")
@@ -33,8 +33,8 @@ pub fn format_tree_streaming<W: Write>(
 
     writeln!(writer, "{}/", root_colored)?;
 
-    // prefix_stack[d] holds the is_last flag of the node currently on the path
-    // at depth d. Children start at depth 1.
+    // prefix_stack[d] 保存当前路径上深度为 d 的节点的 is_last 标志
+    // 子节点从深度 1 开始。
     let mut prefix_stack: Vec<bool> = Vec::new();
 
     walk_core(root, &config, |node| {
@@ -51,12 +51,12 @@ pub fn format_tree_streaming<W: Write>(
     Ok(())
 }
 
-/// Build the tree prefix for a node at `depth` (>= 1).
+/// 为深度为 `depth` (>= 1) 的节点构建树形前缀。
 ///
-/// Ancestor levels 1..depth draw a spacer or vertical bar depending on whether
-/// that ancestor was its parent's last child; the node's own level draws the
-/// branch connector.
-fn build_prefix(prefix_stack: &[bool], depth: usize) -> String {
+/// 祖先层 1..depth 根据该祖先是否为其父节点的最后一个子节点，
+/// 绘制空白间隔或竖线；节点自身所在层绘制分支连接符。
+#[doc(hidden)]
+pub fn build_prefix(prefix_stack: &[bool], depth: usize) -> String {
     let mut prefix = String::new();
 
     for level in 1..depth {
@@ -70,7 +70,7 @@ fn build_prefix(prefix_stack: &[bool], depth: usize) -> String {
     prefix
 }
 
-/// Build the node label.
+/// 构建节点标签。
 fn build_label(
     node: &StreamNode,
     show_size: bool,
@@ -85,7 +85,7 @@ fn build_label(
 
     let mut label = name;
 
-    // Add directory indicator
+    // 添加目录指示符
     if node.node_type == crate::core::models::FsNodeType::Directory {
         label.push('/');
     } else if node.node_type == crate::core::models::FsNodeType::Symlink {
@@ -95,7 +95,7 @@ fn build_label(
         }
     }
 
-    // Add size
+    // 添加大小
     if show_size && node.node_type == crate::core::models::FsNodeType::File && node.size > 0 {
         label.push_str(&format!(" ({})", format_size(node.size, humansize::DECIMAL)));
     }
@@ -103,7 +103,7 @@ fn build_label(
     label
 }
 
-/// Colorize a name based on node type and extension.
+/// 根据节点类型和扩展名对名称着色。
 fn colorize_by_type_and_ext(
     name: &str,
     node_type: &crate::core::models::FsNodeType,
@@ -126,7 +126,7 @@ fn colorize_by_type_and_ext(
     }
 }
 
-/// Basic file color scheme.
+/// 基础文件配色方案。
 fn basic_file_color(name: &str, ext: &str) -> colored::ColoredString {
     use colored::Colorize;
     match ext {
@@ -138,7 +138,7 @@ fn basic_file_color(name: &str, ext: &str) -> colored::ColoredString {
     }
 }
 
-/// Extended file color scheme.
+/// 扩展文件配色方案。
 fn extended_file_color(name: &str, ext: &str) -> colored::ColoredString {
     use colored::Colorize;
     match ext {
@@ -157,45 +157,5 @@ fn extended_file_color(name: &str, ext: &str) -> colored::ColoredString {
         "png" | "jpg" | "jpeg" | "gif" | "svg" | "ico" => name.bright_magenta(),
         "zip" | "tar" | "gz" | "rar" | "7z" => name.red(),
         _ => name.normal(),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // prefix_stack[d] = is_last flag of the node on the path at depth d.
-    // Index 0 is unused (root is drawn separately); children start at depth 1.
-
-    #[test]
-    fn test_build_prefix() {
-        // A depth-1 node that is not its parent's last child.
-        let prefix_stack = vec![false, false];
-        let prefix = build_prefix(&prefix_stack, 1);
-        assert_eq!(prefix, "├── ");
-    }
-
-    #[test]
-    fn test_build_prefix_last() {
-        // A depth-1 node that is its parent's last child.
-        let prefix_stack = vec![false, true];
-        let prefix = build_prefix(&prefix_stack, 1);
-        assert_eq!(prefix, "└── ");
-    }
-
-    #[test]
-    fn test_build_prefix_nested() {
-        // depth-2 node, last child; its depth-1 ancestor is NOT last => "│   ".
-        let prefix_stack = vec![false, false, true];
-        let prefix = build_prefix(&prefix_stack, 2);
-        assert_eq!(prefix, "│   └── ");
-    }
-
-    #[test]
-    fn test_build_prefix_nested_ancestor_last() {
-        // depth-2 node, last child; its depth-1 ancestor IS last => "    ".
-        let prefix_stack = vec![false, true, true];
-        let prefix = build_prefix(&prefix_stack, 2);
-        assert_eq!(prefix, "    └── ");
     }
 }

@@ -1,26 +1,26 @@
-//! Tree-style output formatter.
+//! 树形输出格式化器。
 
 use crate::core::models::FsNode;
 use crate::config::{ColorMode, ColorScheme};
 use crate::config::color::{colorize_node, should_use_colors};
 use humansize::format_size;
 
-/// Format a file tree as a tree structure using Unicode box-drawing characters.
+/// 使用 Unicode 制表符将文件树格式化为树形结构。
 ///
-/// # Arguments
+/// # 参数
 ///
-/// * `node` - The root node of the tree
-/// * `show_size` - Whether to display file sizes
-/// * `color_mode` - When to use colors
-/// * `color_scheme` - Color scheme to use
+/// * `node` - 树的根节点
+/// * `show_size` - 是否显示文件大小
+/// * `color_mode` - 何时使用颜色
+/// * `color_scheme` - 使用的配色方案
 ///
-/// # Returns
+/// # 返回
 ///
-/// A formatted string representing the tree structure.
+/// 表示树形结构的格式化字符串。
 pub fn format_tree(node: &FsNode, show_size: bool, color_mode: ColorMode, color_scheme: ColorScheme) -> String {
     let mut output = String::new();
 
-    // Print root directory with color
+    // 打印根目录并着色
     let root_name = if should_use_colors(color_mode) {
         colorize_node(node, color_scheme).to_string()
     } else {
@@ -37,7 +37,7 @@ pub fn format_tree(node: &FsNode, show_size: bool, color_mode: ColorMode, color_
 
     output.push_str(&format!("{}{}/\n", root_name, size_str));
 
-    // Print children with tree prefixes
+    // 打印子节点并附带树形前缀
     if let Some(children) = &node.children {
         let last_index = children.len().saturating_sub(1);
         for (i, child) in children.iter().enumerate() {
@@ -56,7 +56,7 @@ pub fn format_tree(node: &FsNode, show_size: bool, color_mode: ColorMode, color_
     output
 }
 
-/// Recursively format a node with appropriate tree prefixes.
+/// 递归地格式化节点并附带相应的树形前缀。
 fn format_node_recursive(
     node: &FsNode,
     prefix: &str,
@@ -66,7 +66,7 @@ fn format_node_recursive(
     color_scheme: ColorScheme,
     output: &mut String,
 ) {
-    // Determine the connector and next prefix
+    // 确定连接符和下一个前缀
     let (connector, next_prefix_base) = if is_last {
         ("└── ", "    ")
     } else {
@@ -75,7 +75,7 @@ fn format_node_recursive(
 
     let next_prefix = format!("{}{}", prefix, next_prefix_base);
 
-    // Build the node label with color
+    // 构建节点标签并着色
     let use_color = should_use_colors(color_mode);
     let name = if use_color {
         colorize_node(node, color_scheme).to_string()
@@ -85,7 +85,7 @@ fn format_node_recursive(
 
     let mut label = name;
 
-    // Add directory indicator
+    // 添加目录指示符
     if node.is_directory() {
         label.push('/');
     } else if node.is_symlink() {
@@ -97,7 +97,7 @@ fn format_node_recursive(
         }
     }
 
-    // Add size information if requested
+    // 如有需要，添加大小信息
     if show_size && node.is_file() && node.size > 0 {
         label.push_str(&format!(" ({})", format_size_impl(node.size)));
     } else if show_size && node.is_directory() {
@@ -109,7 +109,7 @@ fn format_node_recursive(
 
     output.push_str(&format!("{}{}{}\n", prefix, connector, label));
 
-    // Print children
+    // 打印子节点
     if let Some(children) = &node.children {
         let last_index = children.len().saturating_sub(1);
         for (i, child) in children.iter().enumerate() {
@@ -126,12 +126,13 @@ fn format_node_recursive(
     }
 }
 
-/// Format a size in bytes to a human-readable string.
-fn format_size_impl(bytes: u64) -> String {
+/// 将字节数格式化为人类可读的字符串。
+#[doc(hidden)]
+pub fn format_size_impl(bytes: u64) -> String {
     format_size(bytes, humansize::DECIMAL)
 }
 
-/// Count all files in a subtree (recursively).
+/// 统计子树中的所有文件（递归）。
 fn count_files_recursive(node: &FsNode) -> usize {
     let mut count = 0;
 
@@ -146,53 +147,4 @@ fn count_files_recursive(node: &FsNode) -> usize {
     }
 
     count
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::core::models::{FsNodeType, FsNode};
-
-    #[test]
-    fn test_format_tree_simple() {
-        let file1 = FsNode::new(
-            "file.txt".into(),
-            "/test/file.txt".into(),
-            FsNodeType::File,
-            1024,
-            1,
-        );
-        let mut dir1 = FsNode::new(
-            "subdir".into(),
-            "/test/subdir".into(),
-            FsNodeType::Directory,
-            0,
-            1,
-        );
-        dir1.children = Some(vec![]);
-
-        let mut root = FsNode::new(
-            "root".into(),
-            "/test".into(),
-            FsNodeType::Directory,
-            0,
-            0,
-        );
-        root.children = Some(vec![dir1, file1]);
-
-        let output = format_tree(&root, false, ColorMode::Never, ColorScheme::None);
-
-        assert!(output.contains("root/"));
-        assert!(output.contains("subdir/"));
-        assert!(output.contains("file.txt"));
-    }
-
-    #[test]
-    fn test_format_size() {
-        // humansize uses "KiB" instead of "KB"
-        let s1 = format_size_impl(1024);
-        assert!(s1.contains("K") || s1.contains("k"));
-        let s2 = format_size_impl(1048576);
-        assert!(s2.contains("M") || s2.contains("m"));
-    }
 }

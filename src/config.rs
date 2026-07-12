@@ -1,4 +1,4 @@
-//! Configuration structures for the rust-tree tool.
+//! rust-tree 工具的配置结构。
 
 use std::path::PathBuf;
 use clap::{Parser, ValueEnum};
@@ -7,25 +7,25 @@ use crate::core::walker::{WalkConfig, SortField};
 pub mod color;
 pub use color::{ColorMode, ColorScheme};
 
-/// Output format options.
+/// 输出格式选项。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum OutputFormat {
-    /// Tree-style output with Unicode characters
+    /// 使用 Unicode 字符的树形输出
     Tree,
-    /// JSON format (includes both tree and statistics)
+    /// JSON 格式（同时包含树和统计信息）
     Json,
-    /// Table format showing statistics
+    /// 显示统计信息的表格格式
     Table,
 }
 
-/// Sort field options.
+/// 排序字段选项。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum SortBy {
-    /// Sort by file/directory name
+    /// 按文件/目录名称排序
     Name,
-    /// Sort by file size
+    /// 按文件大小排序
     Size,
-    /// Sort by file type/extension
+    /// 按文件类型/扩展名排序
     Type,
 }
 
@@ -39,7 +39,7 @@ impl From<SortBy> for SortField {
     }
 }
 
-/// Command-line arguments for rust-tree.
+/// rust-tree 的命令行参数。
 #[derive(Parser, Debug)]
 #[command(name = "rust-tree")]
 #[command(author = "rust-tree contributors")]
@@ -47,77 +47,77 @@ impl From<SortBy> for SortField {
 #[command(about = "A fast directory tree visualization tool", long_about = None)]
 #[command(after_help = "Examples:\n  rust-tree                    # Show current directory\n  rust-tree -d 2 /path/to/dir  # Limit depth to 2\n  rust-tree -f json -S         # JSON output with stats\n  rust-tree -s -o size -r      # Show sizes, sort by size (descending)")]
 pub struct Config {
-    /// Target directory path (defaults to current directory)
+    /// 目标目录路径（默认为当前目录）
     #[arg(value_name = "DIRECTORY", default_value = ".")]
     pub path: PathBuf,
 
-    /// Maximum recursion depth (0 means unlimited)
+    /// 最大递归深度（0 表示无限制）
     #[arg(short = 'd', long = "depth", default_value = "0", value_name = "N")]
     pub max_depth: usize,
 
-    /// Output format
+    /// 输出格式
     #[arg(short = 'f', long = "format", default_value = "tree", value_name = "FORMAT")]
     pub format: OutputFormat,
 
-    /// Show file sizes
+    /// 显示文件大小
     #[arg(short = 's', long = "size")]
     pub show_size: bool,
 
-    /// Show hidden files (starting with .)
+    /// 显示隐藏文件（以 . 开头的文件）
     #[arg(short = 'a', long = "all")]
     pub show_hidden: bool,
 
-    /// Sort by field (name, size, type)
+    /// 按字段排序（name、size、type）
     #[arg(short = 'o', long = "sort", default_value = "name", value_name = "BY")]
     pub sort_by: SortBy,
 
-    /// Reverse sort order
+    /// 反向排序
     #[arg(short = 'r', long = "reverse")]
     pub reverse: bool,
 
-    /// Show statistics summary (for tree format) or always include stats (for json/table)
+    /// 显示统计摘要（用于 tree 格式），或在 json/table 格式下始终包含统计信息
     #[arg(short = 'S', long = "stats")]
     pub show_stats: bool,
 
-    /// Follow symbolic links
+    /// 跟随符号链接
     #[arg(short = 'L', long = "follow")]
     pub follow_symlinks: bool,
 
-    /// Number of largest files to show in statistics
+    /// 统计信息中显示的最大文件数量
     #[arg(long = "top-files", default_value = "10", value_name = "N")]
     pub top_files: usize,
 
-    /// Color mode (always, never, auto)
+    /// 颜色模式（always、never、auto）
     #[arg(long = "color", default_value = "auto", value_name = "WHEN")]
     pub color_mode: ColorMode,
 
-    /// Color scheme (none, basic, extended)
+    /// 颜色方案（none、basic、extended）
     #[arg(long = "color-scheme", default_value = "basic", value_name = "SCHEME")]
     pub color_scheme: ColorScheme,
 
-    /// Show progress bar during scanning
+    /// 扫描时显示进度条
     #[arg(long = "progress", short = 'p', help = "Show progress bar during scanning")]
     pub show_progress: bool,
 
-    /// Exclude files matching pattern (can be used multiple times)
+    /// 排除匹配模式的文件（可多次使用）
     #[arg(short = 'e', long = "exclude", value_name = "PATTERN")]
     pub exclude: Vec<String>,
 
-    /// Include only files matching pattern
+    /// 仅包含匹配模式的文件
     #[arg(long = "include-only", value_name = "PATTERN")]
     pub include_only: Option<String>,
 
-    /// Use common exclude patterns for a language
+    /// 使用某种语言常用的排除模式
     #[arg(long = "exclude-common", value_name = "LANGUAGE")]
     pub exclude_common: Option<String>,
 
-    /// Use streaming mode for low memory usage
+    /// 使用流式模式以降低内存占用
     #[arg(long = "streaming", help = "Use streaming mode for low memory usage")]
     pub streaming: bool,
 }
 
 impl Config {
-    /// Convert to a WalkConfig for use by the walker module.
+    /// 转换为 WalkConfig，供 walker 模块使用。
     pub fn to_walk_config(&self) -> WalkConfig {
         use crate::core::filter::FilterConfig;
         use crate::core::filter::common_excludes;
@@ -125,17 +125,17 @@ impl Config {
         let mut filter = FilterConfig::new();
         filter.exclude_hidden = !self.show_hidden;
 
-        // Add exclude patterns
+        // 添加排除模式
         for pattern in &self.exclude {
             let _ = filter.add_exclude(pattern);
         }
 
-        // Add include pattern
+        // 添加包含模式
         if let Some(ref pattern) = self.include_only {
             let _ = filter.set_include(pattern);
         }
 
-        // Add common excludes
+        // 添加常用排除项
         if let Some(ref lang) = self.exclude_common {
             match lang.as_str() {
                 "rust" => {
@@ -172,31 +172,13 @@ impl Config {
         }
     }
 
-    /// Check if statistics should be displayed.
+    /// 检查是否应显示统计信息。
     pub fn should_show_stats(&self) -> bool {
         self.show_stats || matches!(self.format, OutputFormat::Json | OutputFormat::Table)
     }
 
-    /// Get the effective top files count.
+    /// 获取生效的最大文件显示数量。
     pub fn top_files_count(&self) -> usize {
         self.top_files.max(1)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_sort_by_conversion() {
-        assert_eq!(SortField::from(SortBy::Name), SortField::Name);
-        assert_eq!(SortField::from(SortBy::Size), SortField::Size);
-        assert_eq!(SortField::from(SortBy::Type), SortField::Type);
-    }
-
-    #[test]
-    fn test_output_format_values() {
-        let formats = [OutputFormat::Tree, OutputFormat::Json, OutputFormat::Table];
-        assert_eq!(formats.len(), 3);
     }
 }

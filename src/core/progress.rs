@@ -1,16 +1,16 @@
-//! Progress reporting for directory traversal.
+//! 目录遍历的进度报告。
 
 use indicatif::{ProgressBar, ProgressStyle};
 use std::time::Duration;
 
-/// Progress reporter configuration.
+/// 进度报告器配置。
 #[derive(Debug, Clone)]
 pub struct ProgressConfig {
-    /// Show progress bar
+    /// 显示进度条
     pub enabled: bool,
-    /// Progress style template
+    /// 进度条样式模板
     pub template: String,
-    /// Clear progress bar when complete
+    /// 完成时清除进度条
     pub clear_on_finish: bool,
 }
 
@@ -24,7 +24,7 @@ impl Default for ProgressConfig {
     }
 }
 
-/// Create a new progress bar.
+/// 创建一个新的进度条。
 pub fn create_progress_bar(config: &ProgressConfig) -> Option<ProgressBar> {
     if !config.enabled {
         return None;
@@ -41,59 +41,30 @@ pub fn create_progress_bar(config: &ProgressConfig) -> Option<ProgressBar> {
     Some(pb)
 }
 
-/// Update progress message.
+/// 更新进度消息。
 pub fn update_progress(pb: &Option<ProgressBar>, msg: &str) {
     if let Some(pb) = pb {
         pb.set_message(msg.to_string());
     }
 }
 
-/// Increment progress counter.
+/// 递增进度计数。
 pub fn increment_progress(pb: &Option<ProgressBar>) {
     if let Some(pb) = pb {
         pb.inc(1);
     }
 }
 
-/// Finish progress with message.
+/// 以消息完成进度。
 pub fn finish_progress(pb: &Option<ProgressBar>, msg: &str) {
     if let Some(pb) = pb {
         pb.finish_with_message(msg.to_string());
     }
 }
 
-/// Abandon progress (remove from screen).
+/// 放弃进度（从屏幕移除）。
 pub fn abandon_progress(pb: &Option<ProgressBar>) {
     if let Some(pb) = pb {
         pb.abandon();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_progress_config_default() {
-        let config = ProgressConfig::default();
-        assert!(!config.enabled);
-        assert!(config.clear_on_finish);
-    }
-
-    #[test]
-    fn test_create_progress_bar_disabled() {
-        let config = ProgressConfig::default();
-        let pb = create_progress_bar(&config);
-        assert!(pb.is_none());
-    }
-
-    #[test]
-    fn test_create_progress_bar_enabled() {
-        let config = ProgressConfig {
-            enabled: true,
-            ..Default::default()
-        };
-        let pb = create_progress_bar(&config);
-        assert!(pb.is_some());
     }
 }

@@ -1,16 +1,16 @@
-//! rust-tree - A fast directory tree visualization tool.
+//! rust-tree - 一个快速的目录树可视化工具。
 //!
-//! This is the main entry point for the command-line interface.
+//! 这是命令行界面的主入口。
 
 use clap::Parser;
 use rust_tree::Config;
 use std::process;
 
 fn main() {
-    // Parse command-line arguments
+    // 解析命令行参数
     let config = Config::parse();
 
-    // Run the tool
+    // 运行工具
     if let Err(e) = rust_tree::run(config) {
         eprintln!("Error: {}", e);
         process::exit(1);

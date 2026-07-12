@@ -66,4 +66,4 @@ User Input → Config → Walker → FsTree → Collector → TreeStats → Form
 
 ### Testing
 
-Integration tests are in `tests/integration_test.rs`. Unit tests are in `#[cfg(test)]` modules within each source file.
+Integration tests live in `tests/` and mirror the `src/` module structure: `tests/core.rs`, `tests/formatters.rs`, and `tests/config.rs` are entry crates that pull in submodule tests under `tests/core/`, `tests/formatters/`, and `tests/config/` respectively, plus `tests/integration_test.rs` for end-to-end coverage. Unit tests are in `#[cfg(test)]` modules within each source file.
