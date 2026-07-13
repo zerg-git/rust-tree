@@ -5,10 +5,10 @@
 //! `walk_directory` 只是该流的一个轻量消费者，为需要整棵树常驻内存的调用者
 //! （JSON、统计信息、最大文件）物化出一棵 `FsTree`。
 
-use std::path::Path;
-use crate::core::models::{FsNode, FsTree, FsNodeType, TreeError};
 use crate::core::filter::FilterConfig;
+use crate::core::models::{FsNode, FsNodeType, FsTree, TreeError};
 use crate::core::streaming::walk_core;
+use std::path::Path;
 
 /// 目录遍历的配置。由内存树构建器和流式格式化器共享。
 #[derive(Debug, Clone)]
@@ -25,6 +25,12 @@ pub struct WalkConfig {
     pub reverse: bool,
     /// 过滤器配置
     pub filter: FilterConfig,
+    /// 是否需要文件的字节大小。
+    ///
+    /// 为 false 时遍历核心会跳过对文件的 `stat` 调用（size 置 0），
+    /// 适用于流式输出且不显示 size 的场景。`sort_by == Size` 总是隐式需要 size，
+    /// 由遍历核心内部兜底，无需调用者在此置位。
+    pub need_size: bool,
 }
 
 /// 目录条目的排序字段。
@@ -47,6 +53,7 @@ impl Default for WalkConfig {
             sort_by: SortField::Name,
             reverse: false,
             filter: FilterConfig::default(),
+            need_size: true,
         }
     }
 }
@@ -75,8 +82,12 @@ pub fn walk_directory(path: &Path, config: &WalkConfig) -> Result<FsTree, TreeEr
     // 打开目录的栈帧栈；stack[0] 始终是根节点。一个栈帧在被弹出时会挂接到
     // 其父节点上，而弹出恰好发生在下一个兄弟节点（或叔伯节点）到达时——
     // 从而保持流（已排序）的顺序。
-    let mut stack: Vec<FsNode> =
-        vec![FsNode::new_directory(root_name, path.to_path_buf(), 0, Vec::new())];
+    let mut stack: Vec<FsNode> = vec![FsNode::new_directory(
+        root_name,
+        path.to_path_buf(),
+        0,
+        Vec::new(),
+    )];
     let mut max_depth = 0usize;
 
     walk_core(path, config, |node| {
@@ -130,10 +141,7 @@ pub fn walk_directory(path: &Path, config: &WalkConfig) -> Result<FsTree, TreeEr
 fn attach(stack: &mut [FsNode], mut finished: FsNode) {
     normalize_empty_children(&mut finished);
     if let Some(parent) = stack.last_mut() {
-        parent
-            .children
-            .get_or_insert_with(Vec::new)
-            .push(finished);
+        parent.children.get_or_insert_with(Vec::new).push(finished);
     }
 }
 

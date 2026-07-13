@@ -8,10 +8,10 @@
 //! 峰值内存为 O(最宽目录)：每次只为排序而缓冲单个目录的条目——而非
 //! 整棵树。
 
-use std::path::{Path, PathBuf};
-use walkdir::WalkDir;
 use crate::core::models::{FsNodeType, TreeError};
 use crate::core::walker::{SortField, WalkConfig};
+use std::path::{Path, PathBuf};
+use walkdir::WalkDir;
 
 /// 遍历核心输出的节点。
 #[derive(Debug, Clone)]
@@ -95,8 +95,10 @@ where
             FsNodeType::File
         };
 
-        // 只有文件需要大小，因此只有文件才付出一次 stat 调用的代价。
-        let size = if node_type == FsNodeType::File {
+        // 只有当调用者需要 size（显示 size 或内存路径的统计）或按 size 排序时，
+        // 才对文件付出一次 stat 调用的代价；否则跳过，size 置 0。
+        let need = config.need_size || config.sort_by == SortField::Size;
+        let size = if need && node_type == FsNodeType::File {
             entry.metadata().map(|m| m.len()).unwrap_or(0)
         } else {
             0
@@ -154,12 +156,12 @@ fn sort_scanned(entries: &mut [Scanned], config: &WalkConfig) {
     };
 
     match config.sort_by {
-        SortField::Name => entries.sort_by(|a, b| {
-            dir_first(a, b).unwrap_or_else(|| a.name.cmp(&b.name))
-        }),
-        SortField::Size => entries.sort_by(|a, b| {
-            dir_first(a, b).unwrap_or_else(|| b.size.cmp(&a.size))
-        }),
+        SortField::Name => {
+            entries.sort_by(|a, b| dir_first(a, b).unwrap_or_else(|| a.name.cmp(&b.name)))
+        }
+        SortField::Size => {
+            entries.sort_by(|a, b| dir_first(a, b).unwrap_or_else(|| b.size.cmp(&a.size)))
+        }
         SortField::Type => entries.sort_by(|a, b| {
             dir_first(a, b).unwrap_or_else(|| {
                 ext_of(&a.name)

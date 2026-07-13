@@ -1,8 +1,8 @@
 //! rust-tree 工具的配置结构。
 
-use std::path::PathBuf;
+use crate::core::walker::{SortField, WalkConfig};
 use clap::{Parser, ValueEnum};
-use crate::core::walker::{WalkConfig, SortField};
+use std::path::PathBuf;
 
 pub mod color;
 pub use color::{ColorMode, ColorScheme};
@@ -45,7 +45,9 @@ impl From<SortBy> for SortField {
 #[command(author = "rust-tree contributors")]
 #[command(version = "0.1.0")]
 #[command(about = "A fast directory tree visualization tool", long_about = None)]
-#[command(after_help = "Examples:\n  rust-tree                    # Show current directory\n  rust-tree -d 2 /path/to/dir  # Limit depth to 2\n  rust-tree -f json -S         # JSON output with stats\n  rust-tree -s -o size -r      # Show sizes, sort by size (descending)")]
+#[command(
+    after_help = "Examples:\n  rust-tree                    # Show current directory\n  rust-tree -d 2 /path/to/dir  # Limit depth to 2\n  rust-tree -f json -S         # JSON output with stats\n  rust-tree -s -o size -r      # Show sizes, sort by size (descending)"
+)]
 pub struct Config {
     /// 目标目录路径（默认为当前目录）
     #[arg(value_name = "DIRECTORY", default_value = ".")]
@@ -56,7 +58,12 @@ pub struct Config {
     pub max_depth: usize,
 
     /// 输出格式
-    #[arg(short = 'f', long = "format", default_value = "tree", value_name = "FORMAT")]
+    #[arg(
+        short = 'f',
+        long = "format",
+        default_value = "tree",
+        value_name = "FORMAT"
+    )]
     pub format: OutputFormat,
 
     /// 显示文件大小
@@ -96,7 +103,11 @@ pub struct Config {
     pub color_scheme: ColorScheme,
 
     /// 扫描时显示进度条
-    #[arg(long = "progress", short = 'p', help = "Show progress bar during scanning")]
+    #[arg(
+        long = "progress",
+        short = 'p',
+        help = "Show progress bar during scanning"
+    )]
     pub show_progress: bool,
 
     /// 排除匹配模式的文件（可多次使用）
@@ -119,8 +130,8 @@ pub struct Config {
 impl Config {
     /// 转换为 WalkConfig，供 walker 模块使用。
     pub fn to_walk_config(&self) -> WalkConfig {
-        use crate::core::filter::FilterConfig;
         use crate::core::filter::common_excludes;
+        use crate::core::filter::FilterConfig;
 
         let mut filter = FilterConfig::new();
         filter.exclude_hidden = !self.show_hidden;
@@ -169,6 +180,10 @@ impl Config {
             sort_by: self.sort_by.into(),
             reverse: self.reverse,
             filter,
+            // 流式路径仅在显示 size 时需要 stat；按 size 排序的需求由
+            // walk_children 内部 OR `sort_by == Size` 兜底。内存路径无条件
+            // 需要 size（collect_stats 始终要 total_size / largest_files）。
+            need_size: if self.streaming { self.show_size } else { true },
         }
     }
 
