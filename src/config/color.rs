@@ -1,8 +1,9 @@
 //! 树形输出的颜色配置。
 
-use colored::Colorize;
-use clap::ValueEnum;
 use crate::core::models::FsNode;
+use clap::ValueEnum;
+use colored::Colorize;
+use std::io::IsTerminal;
 
 /// 颜色方案选项。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
@@ -31,15 +32,9 @@ pub enum ColorMode {
 /// 根据节点类型为节点名称着色。
 pub fn colorize_node(node: &FsNode, scheme: ColorScheme) -> colored::ColoredString {
     match node.node_type {
-        crate::core::models::FsNodeType::Directory => {
-            node.name.clone().blue().bold()
-        }
-        crate::core::models::FsNodeType::File => {
-            colorize_file(&node.name, scheme)
-        }
-        crate::core::models::FsNodeType::Symlink => {
-            node.name.clone().cyan().italic()
-        }
+        crate::core::models::FsNodeType::Directory => node.name.clone().blue().bold(),
+        crate::core::models::FsNodeType::File => colorize_file(&node.name, scheme),
+        crate::core::models::FsNodeType::Symlink => node.name.clone().cyan().italic(),
     }
 }
 
@@ -103,6 +98,6 @@ pub fn should_use_colors(mode: ColorMode) -> bool {
     match mode {
         ColorMode::Always => true,
         ColorMode::Never => false,
-        ColorMode::Auto => atty::is(atty::Stream::Stdout),
+        ColorMode::Auto => std::io::stdout().is_terminal(),
     }
 }

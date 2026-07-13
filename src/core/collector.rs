@@ -1,8 +1,8 @@
 //! 从文件系统树中收集统计信息。
 
+use crate::core::models::{FileEntry, FileTypeInfo, FsNode, FsTree, TreeStats};
 use std::collections::HashMap;
 use std::time::Instant;
-use crate::core::models::{FsTree, FsNode, TreeStats, FileTypeInfo, FileEntry};
 
 /// 从文件系统树中收集统计信息。
 ///
@@ -65,15 +65,18 @@ pub fn analyze_by_extension(files: &[&FsNode], total_size: u64) -> HashMap<Strin
     let mut by_ext: HashMap<String, (usize, u64)> = HashMap::new();
 
     for file in files {
-        let ext = file.extension().unwrap_or_else(|| "(no extension)".to_string());
+        let ext = file
+            .extension()
+            .unwrap_or_else(|| "(no extension)".to_string());
 
         let entry = by_ext.entry(ext).or_insert((0, 0));
-        entry.0 += 1;  // 数量
-        entry.1 += file.size;  // 总大小
+        entry.0 += 1; // 数量
+        entry.1 += file.size; // 总大小
     }
 
     // 转换为带百分比的 FileTypeInfo
-    by_ext.into_iter()
+    by_ext
+        .into_iter()
         .map(|(ext, (count, size))| {
             let percentage = if total_size > 0 {
                 (size as f64 / total_size as f64) * 100.0
@@ -105,25 +108,31 @@ pub fn analyze_by_extension(files: &[&FsNode], total_size: u64) -> HashMap<Strin
 /// 一个由 `FileEntry` 对象组成的向量，按大小排序（最大者在前）。
 #[doc(hidden)]
 pub fn find_largest_files(files: &[&FsNode], limit: usize) -> Vec<FileEntry> {
-    if files.is_empty() {
+    if files.is_empty() || limit == 0 {
         return Vec::new();
     }
 
     // 收集所有条目
     let mut entries: Vec<FileEntry> = files
         .iter()
-        .map(|file| FileEntry::new(
-            file.name.clone(),
-            file.path.clone().unwrap_or_default(),
-            file.size,
-        ))
+        .map(|file| {
+            FileEntry::new(
+                file.name.clone(),
+                file.path.clone().unwrap_or_default(),
+                file.size,
+            )
+        })
         .collect();
 
-    // 按大小排序（降序）
-    entries.sort_by_key(|e| std::cmp::Reverse(e.size));
+    // 仅选出最大的前 `limit` 个，再对这前缀排序——避免对全量做 O(n log n)。
+    // select_nth_unstable_by 按 `cmp` 排列：第 k 位恰好是排序后该位置的元素，
+    // 其左侧均 ≤ 右侧，但前缀内部本身无序，因此还需要单独排序。
+    let cmp = |a: &FileEntry, b: &FileEntry| b.size.cmp(&a.size); // 降序：最大在前
+    let k = limit.min(entries.len());
+    let (front, _, _) = entries.select_nth_unstable_by(k - 1, cmp);
+    front.sort_by(cmp);
 
-    // 取前 N 个
-    entries.truncate(limit);
+    entries.truncate(k);
     entries
 }
 

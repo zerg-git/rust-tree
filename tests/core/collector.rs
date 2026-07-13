@@ -49,3 +49,56 @@ fn test_analyze_by_extension() {
     assert_eq!(by_ext.get(".rs").unwrap().count, 2);
     assert_eq!(by_ext.get(".md").unwrap().count, 1);
 }
+
+#[test]
+fn test_find_largest_files_zero_limit() {
+    let files = [FsNode::new(
+        "a.txt".into(),
+        "/a.txt".into(),
+        FsNodeType::File,
+        100,
+        0,
+    )];
+    let refs: Vec<&FsNode> = files.iter().collect();
+    assert!(find_largest_files(&refs, 0).is_empty());
+}
+
+#[test]
+fn test_find_largest_files_limit_exceeds_count() {
+    // limit 超过文件数时应返回全部并保持降序
+    let files = [
+        FsNode::new("a.txt".into(), "/a.txt".into(), FsNodeType::File, 100, 0),
+        FsNode::new("b.txt".into(), "/b.txt".into(), FsNodeType::File, 500, 0),
+    ];
+    let refs: Vec<&FsNode> = files.iter().collect();
+    let largest = find_largest_files(&refs, 10);
+
+    assert_eq!(largest.len(), 2);
+    assert_eq!(largest[0].size, 500);
+    assert_eq!(largest[1].size, 100);
+}
+
+#[test]
+fn test_analyze_by_extension_ignores_dotfiles() {
+    // 点文件应归入“(no extension)”，而非被当成扩展名 ".gitignore"
+    let files = [
+        FsNode::new(
+            ".gitignore".into(),
+            "/.gitignore".into(),
+            FsNodeType::File,
+            10,
+            0,
+        ),
+        FsNode::new("a.txt".into(), "/a.txt".into(), FsNodeType::File, 40, 0),
+        FsNode::new("b.txt".into(), "/b.txt".into(), FsNodeType::File, 60, 0),
+    ];
+
+    let refs: Vec<&FsNode> = files.iter().collect();
+    let by_ext = analyze_by_extension(&refs, 110);
+
+    // ".txt" 一桶，点文件归入 "(no extension)" 一桶；未产生 ".gitignore" 分类
+    assert_eq!(by_ext.len(), 2);
+    assert_eq!(by_ext.get(".txt").unwrap().count, 2);
+    assert_eq!(by_ext.get("(no extension)").unwrap().count, 1);
+    assert!(by_ext.get(".gitignore").is_none());
+}

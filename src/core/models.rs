@@ -1,9 +1,9 @@
 //! 表示文件系统树和统计信息的核心数据结构。
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
-use serde::{Serialize, Deserialize};
 
 /// 文件系统节点类型分类。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -64,12 +64,7 @@ impl FsNode {
     }
 
     /// 创建一个带子节点的新目录节点。
-    pub fn new_directory(
-        name: String,
-        path: PathBuf,
-        depth: usize,
-        children: Vec<FsNode>,
-    ) -> Self {
+    pub fn new_directory(name: String, path: PathBuf, depth: usize, children: Vec<FsNode>) -> Self {
         Self {
             name,
             path: Some(path),
@@ -96,15 +91,21 @@ impl FsNode {
     }
 
     /// 获取文件扩展名（如果有）。
+    ///
+    /// 点文件（如 `.gitignore`）和以点号结尾的名字（如 `file.`）视为无扩展名。
+    /// 仅当最后一个点既不在首位也不在末位时，才取从该点开始的后缀（含点号）。
     pub fn extension(&self) -> Option<String> {
         if self.is_directory() {
             return None;
         }
-        self.name
-            .rsplit('.')
-            .next()
-            .filter(|ext| !ext.is_empty() && self.name.contains('.'))
-            .map(|s| format!(".{}", s))
+        let name = &self.name;
+        let pos = name.rfind('.')?;
+        // pos == 0  ⇒ 点在首位（.gitignore），无扩展名；
+        // pos == name.len()-1 ⇒ 点在末位（file.），无扩展名。
+        if pos == 0 || pos == name.len() - 1 {
+            return None;
+        }
+        Some(name[pos..].to_string())
     }
 }
 
@@ -239,5 +240,48 @@ pub enum TreeError {
 impl From<serde_json::Error> for TreeError {
     fn from(err: serde_json::Error) -> Self {
         TreeError::Json(err.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn file(name: &str) -> FsNode {
+        FsNode::new(name.into(), PathBuf::from(name), FsNodeType::File, 0, 0)
+    }
+
+    #[test]
+    fn extension_normal() {
+        assert_eq!(file("a.txt").extension().as_deref(), Some(".txt"));
+    }
+
+    #[test]
+    fn extension_multiple_dots() {
+        // 多个点：取最后一个点之后的部分
+        assert_eq!(file("archive.tar.gz").extension().as_deref(), Some(".gz"));
+    }
+
+    #[test]
+    fn extension_dotfile_is_none() {
+        // 点文件不应被当作有扩展名
+        assert_eq!(file(".gitignore").extension(), None);
+        assert_eq!(file(".vimrc").extension(), None);
+    }
+
+    #[test]
+    fn extension_trailing_dot_is_none() {
+        assert_eq!(file("file.").extension(), None);
+    }
+
+    #[test]
+    fn extension_no_dot_is_none() {
+        assert_eq!(file("README").extension(), None);
+    }
+
+    #[test]
+    fn extension_directory_is_none() {
+        let dir = FsNode::new_directory("dir".into(), PathBuf::from("dir"), 0, Vec::new());
+        assert_eq!(dir.extension(), None);
     }
 }

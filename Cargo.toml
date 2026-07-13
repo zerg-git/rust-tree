@@ -33,7 +33,6 @@ humansize = "2.1"
 
 # Error handling
 thiserror = "1.0"
-anyhow = "1.0"
 
 # Color support
 colored = "2.1"
@@ -43,9 +42,6 @@ indicatif = "0.17"
 
 # Pattern matching
 glob = "0.3"
-
-# Terminal detection
-atty = "0.2"
 
 [dev-dependencies]
 assert_cmd = "2.0"
