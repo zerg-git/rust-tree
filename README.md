@@ -1,195 +1,203 @@
 # rust-tree
 
-[English](README.md) | [简体中文](README.zh-CN.md)
+一个用 Rust 编写的快速目录树可视化工具。它能够以多种格式显示目录结构，并提供关于文件分布的全面统计信息。
 
-A fast directory tree visualization tool written in Rust. It displays directory structures in multiple formats and provides comprehensive statistics about file distribution.
+## 功能特性
 
-## Features
+- **多种输出格式**
+  - 使用 Unicode box-drawing 字符的树形输出
+  - 用于程序化处理的 JSON 格式
+  - 用于统计摘要的表格格式
 
-- **Multiple Output Formats**
-  - Tree-style output with Unicode box-drawing characters
-  - JSON format for programmatic processing
-  - Table format for statistical summaries
+- **全面的统计信息**
+  - 文件和目录计数
+  - 总大小计算
+  - 按扩展名分组文件
+  - 最大文件列表
 
-- **Comprehensive Statistics**
-  - File and directory counts
-  - Total size calculation
-  - Files grouped by extension
-  - Largest files listing
+- **灵活的选项**
+  - 限制扫描深度
+  - 按名称、大小或类型排序
+  - 显示隐藏文件
+  - 显示文件大小
+  - 跟随符号链接
+  - **颜色支持** 提高可读性
+  - **排除模式** 过滤文件
+  - **进度指示** 用于大目录扫描
+  - **流式模式** 用于内存高效扫描
 
-- **Flexible Options**
-  - Depth-limited scanning
-  - Sort by name, size, or type
-  - Show hidden files
-  - Display file sizes
-  - Follow symbolic links
-  - **Color support** for better readability
-  - **Exclude patterns** for filtering files
-  - **Progress indication** for large directories
-  - **Streaming mode** for memory-efficient scanning
+## 安装
 
-## Installation
-
-### From Source
+### 从源码安装
 
 ```bash
 cargo install --path .
 ```
 
-### Build from Source
+### 从源码构建
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/zerg-git/rust-tree
 cd rust-tree
 cargo build --release
 ```
 
-The binary will be available at `target/release/rust-tree`.
+生成的二进制文件将位于 `target/release/rust-tree`。
 
-## Usage
+## 使用方法
 
-### Basic Usage
+### 基本用法
 
 ```bash
-# Show current directory tree
+# 显示当前目录树
 rust-tree
 
-# Show a specific directory
+# 显示指定目录
 rust-tree /path/to/directory
 
-# Limit depth to 2 levels
+# 限制深度为 2 层
 rust-tree -d 2 /path/to/directory
 ```
 
-### Output Formats
+### 输出格式
 
 ```bash
-# Tree format (default)
+# 树形格式（默认）
 rust-tree
 
-# JSON format
+# JSON 格式
 rust-tree -f json
 
-# Table format with statistics
+# 带统计信息的表格格式
 rust-tree -f table -S
 ```
 
-### Color Support
+### 颜色支持
 
 ```bash
-# Always use colors
+# 始终使用颜色
 rust-tree --color=always
 
-# Never use colors (useful for piping to files)
+# 从不使用颜色（适用于输出到文件）
 rust-tree --color=never
 
-# Auto-detect terminal support (default)
+# 自动检测终端支持（默认）
 rust-tree --color=auto
 
-# Use extended color scheme with more file type colors
+# 使用扩展颜色方案，支持更多文件类型颜色
 rust-tree --color-scheme=extended
 ```
 
-### Filtering
+### 文件过滤
 
 ```bash
-# Exclude files matching a pattern
+# 排除匹配模式的文件
 rust-tree --exclude "*.log"
 
-# Exclude multiple patterns
+# 排除多个模式
 rust-tree -e "*.log" -e "node_modules" -e ".git"
 
-# Include only files matching a pattern
+# 仅包含匹配模式的文件
 rust-tree --include-only "*.rs"
 
-# Use common exclude patterns for specific languages
-rust-tree --exclude-common=rust      # Rust projects
-rust-tree --exclude-common=python    # Python projects
-rust-tree --exclude-common=nodejs    # Node.js projects
-rust-tree --exclude-common=common    # Common development files
+# 使用特定语言的常见排除模式
+rust-tree --exclude-common=rust      # Rust 项目
+rust-tree --exclude-common=python    # Python 项目
+rust-tree --exclude-common=nodejs    # Node.js 项目（也可用 node、javascript）
+rust-tree --exclude-common=common    # 通用开发文件
+# 未知语言会报错退出，不会被静默忽略。
 ```
 
-### Progress Indication
+### 进度指示
 
 ```bash
-# Show progress bar during scanning
+# 扫描期间显示实时进度条。
+# 显示已扫描节点数与当前目录路径，默认与流式模式均生效。
 rust-tree --progress
 ```
 
-### Streaming Mode
+### 流式模式
 
 ```bash
-# Use streaming mode for low memory usage on large directories
+# 流式模式：大目录扫描的内存高效方式。
+# 峰值内存为 O(最宽目录的宽度)，而非整棵树。
 rust-tree --streaming
+
+# 默认流式路径（不显示 size、按名称排序）会跳过 per-file stat。
+# 全盘实测（约 750 万条目）：~86s、峰值 ~76MB、~4.95 万条目/秒。
+# --show-size 或 --sort size 会按需重新启用 stat。
+# 注意：--streaming 不能与 --stats / -f json / -f table 同时使用
+# （统计需要整棵树）。
+rust-tree --streaming --progress
 ```
 
-### Display Options
+### 显示选项
 
 ```bash
-# Show file sizes
+# 显示文件大小
 rust-tree -s
 
-# Show hidden files
+# 显示隐藏文件
 rust-tree -a
 
-# Sort by file size (descending)
+# 按文件大小排序（降序）
 rust-tree -o size -r
 
-# Sort by file type
+# 按文件类型排序
 rust-tree -o type
 ```
 
-### Examples
+### 示例
 
 ```bash
-# Display tree with colors and sizes
+# 显示带颜色和大小的目录树
 rust-tree --color=always -s
 
-# Scan with progress indication for large directories
+# 扫描大目录时显示进度
 rust-tree --progress /large/directory
 
-# Exclude build artifacts and dependencies
+# 排除构建产物和依赖
 rust-tree --exclude-common=rust --exclude "*.rlib"
 
-# Memory-efficient scanning with streaming
+# 使用流式模式进行内存高效扫描
 rust-tree --streaming -d 5 /very/large/directory
 
-# JSON output with full statistics
+# JSON 输出完整统计信息
 rust-tree -f json -S > stats.json
 
-# Show only Rust source files
+# 仅显示 Rust 源文件
 rust-tree --include-only "*.rs"
 
-# Colored tree with statistics
+# 带统计信息的彩色目录树
 rust-tree --color-scheme=extended -s -S
 ```
 
-## Command-Line Options
+## 命令行选项
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `-d, --depth <N>` | Maximum recursion depth (0 = unlimited) | 0 |
-| `-f, --format <FORMAT>` | Output format (tree/json/table) | tree |
-| `-s, --size` | Show file sizes | false |
-| `-a, --all` | Show hidden files | false |
-| `-o, --sort <BY>` | Sort by (name/size/type) | name |
-| `-r, --reverse` | Reverse sort order | false |
-| `-S, --stats` | Show statistics summary | false |
-| `-L, --follow` | Follow symbolic links | false |
-| `--top-files <N>` | Number of largest files to show | 10 |
-| `--color <WHEN>` | Color mode (always/never/auto) | auto |
-| `--color-scheme <SCHEME>` | Color scheme (none/basic/extended) | basic |
-| `-p, --progress` | Show progress bar | false |
-| `-e, --exclude <PATTERN>` | Exclude files matching pattern | - |
-| `--include-only <PATTERN>` | Include only files matching pattern | - |
-| `--exclude-common <LANGUAGE>` | Use common exclude patterns | - |
-| `--streaming` | Use streaming mode for low memory | false |
-| `-h, --help` | Print help | - |
-| `-V, --version` | Print version | - |
+| 选项 | 描述 | 默认值 |
+|------|------|--------|
+| `-d, --depth <N>` | 最大递归深度（0 = 无限制） | 0 |
+| `-f, --format <FORMAT>` | 输出格式（tree/json/table） | tree |
+| `-s, --size` | 显示文件大小 | false |
+| `-a, --all` | 显示隐藏文件 | false |
+| `-o, --sort <BY>` | 排序方式（name/size/type） | name |
+| `-r, --reverse` | 反向排序 | false |
+| `-S, --stats` | 显示统计摘要 | false |
+| `-L, --follow` | 跟随符号链接 | false |
+| `--top-files <N>` | 显示的最大文件数量 | 10 |
+| `--color <WHEN>` | 颜色模式（always/never/auto） | auto |
+| `--color-scheme <SCHEME>` | 颜色方案（none/basic/extended） | basic |
+| `-p, --progress` | 实时进度条（节点计数 + 当前路径），流式模式同样生效 | false |
+| `-e, --exclude <PATTERN>` | 排除匹配 glob 模式的条目（可多次使用） | - |
+| `--include-only <PATTERN>` | 仅包含匹配模式的文件 | - |
+| `--exclude-common <LANGUAGE>` | 常见排除模式（rust/node/nodejs/javascript/python/common），未知值报错 | - |
+| `--streaming` | 流式模式：低内存 O(最宽目录)；不能与 --stats/-f json/-f table 同用 | false |
+| `-h, --help` | 打印帮助信息 | - |
+| `-V, --version` | 打印版本信息 | - |
 
-## Output Examples
+## 输出示例
 
-### Tree Format
+### 树形格式
 
 ```
 src/
@@ -206,7 +214,7 @@ src/
 └── main.rs
 ```
 
-### JSON Format
+### JSON 格式
 
 ```json
 {
@@ -232,7 +240,7 @@ src/
 }
 ```
 
-### Table Format
+### 表格格式
 
 ```
 ╭──────────────────╬────────╮
@@ -246,58 +254,58 @@ src/
 ╰──────────────────┴────────╯
 ```
 
-## Development
+## 开发
 
-### Project Structure
+### 项目结构
 
 ```
 rust-tree/
 ├── src/
-│   ├── main.rs          # CLI entry point
-│   ├── lib.rs           # Library interface
-│   ├── config.rs        # Configuration & CLI parsing
-│   ├── core/            # Core functionality
-│   │   ├── models.rs    # Data structures
-│   │   ├── walker.rs    # Directory traversal
-│   │   ├── collector.rs # Statistics collection
-│   │   ├── filter.rs    # Pattern filtering
-│   │   ├── progress.rs  # Progress indication
-│   │   └── streaming.rs # Memory-efficient streaming
-│   └── formatters/      # Output formatters
-│       ├── tree.rs      # Tree format
-│       ├── json.rs      # JSON format
-│       ├── table.rs     # Table format
-│       └── streaming_tree.rs # Streaming tree format
-├── docs/                # Documentation
-└── tests/               # Tests
+│   ├── main.rs          # CLI 入口
+│   ├── lib.rs           # 库接口
+│   ├── config.rs        # 配置与 CLI 解析
+│   ├── core/            # 核心功能
+│   │   ├── models.rs    # 数据结构
+│   │   ├── walker.rs    # 目录遍历
+│   │   ├── collector.rs # 统计信息收集
+│   │   ├── filter.rs    # 模式过滤
+│   │   ├── progress.rs  # 进度指示
+│   │   └── streaming.rs # 内存高效的流式处理
+│   └── formatters/      # 输出格式化器
+│       ├── tree.rs      # 树形格式
+│       ├── json.rs      # JSON 格式
+│       ├── table.rs     # 表格格式
+│       └── streaming_tree.rs # 流式树形格式
+├── docs/                # 文档
+└── tests/               # 测试
 ```
 
-### Running Tests
+### 运行测试
 
 ```bash
 cargo test
 ```
 
-### Building
+### 构建
 
 ```bash
-# Debug build
+# Debug 构建
 cargo build
 
-# Release build
+# Release 构建
 cargo build --release
 ```
 
-## Documentation
+## 文档
 
-- [DEVELOPMENT.md](docs/DEVELOPMENT.md) - Technical implementation details
-- [USER_MANUAL.md](docs/USER_MANUAL.md) - Comprehensive user guide
-- [ARCHITECTURE.md](docs/ARCHITECTURE.md) - Architecture design
+- [DEVELOPMENT.md](docs/DEVELOPMENT.md) - 技术实现细节
+- [USER_MANUAL.md](docs/USER_MANUAL.md) - 完整用户指南
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md) - 架构设计
 
-## License
+## 许可证
 
 MIT OR Apache-2.0
 
-## Contributing
+## 贡献
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+欢迎贡献！请随时提交 Pull Request。

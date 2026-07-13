@@ -453,11 +453,11 @@ criterion_main!(benches);
 
 **目标**: 实施低风险、高价值的改进
 
-- [ ] 添加颜色支持
-- [ ] 添加进度条显示
+- [x] 添加颜色支持
+- [x] 添加进度条显示
 - [ ] 实现配置文件支持
 - [ ] 改进错误消息
-- [ ] 添加更多文档示例
+- [x] 添加更多文档示例
 
 **预期成果**:
 - 用户体验显著提升
@@ -470,11 +470,11 @@ criterion_main!(benches);
 
 **目标**: 实现流式处理，降低内存占用
 
-- [ ] 设计并实现 TreeIterator
-- [ ] 重构 format_tree 支持流式输出
-- [ ] 保持向后兼容性（API 不变）
-- [ ] 添加流式处理的集成测试
-- [ ] 性能基准测试
+- [x] 设计并实现 TreeIterator（`core::streaming::walk_core` + `StreamNode`）
+- [x] 重构 format_tree 支持流式输出（`format_tree_streaming`）
+- [x] 向后兼容性：API 有受控变更（`walk_directory`/`format_tree_streaming` 增 `progress` 参、`WalkConfig` 增 `need_size`、新增 `Config::validate`），0.x 版本内允许
+- [x] 添加流式处理的集成测试
+- [x] 性能基准测试
 
 **预期成果**:
 - 内存占用降低 70%+
@@ -487,7 +487,7 @@ criterion_main!(benches);
 
 **目标**: 添加高级功能
 
-- [ ] 实现排除模式（glob 支持）
+- [x] 实现排除模式（glob 支持）
 - [ ] 添加 Markdown 输出格式
 - [ ] 添加 HTML 输出格式
 - [ ] 实现目录大小缓存
@@ -505,9 +505,9 @@ criterion_main!(benches);
 **目标**: 提升处理速度
 
 - [ ] 实现并行目录遍历
-- [ ] 优化排序算法
+- [x] 优化排序算法（`find_largest_files` 用 `select_nth_unstable_by`）
 - [ ] 添加缓存机制
-- [ ] 性能调优和 profiling
+- [x] 性能调优和 profiling（流式默认路径跳过 stat，151s→86s）
 - [ ] 压力测试
 
 **预期成果**:
@@ -544,15 +544,18 @@ criterion_main!(benches);
 | 扫描速度 (10万文件) | ~10s | <5s | +100% |
 | 启动时间 | ~50ms | <20ms | +150% |
 
+> 实测补充（全盘流式，约 750 万条目）：real ~86s、sys ~52s、峰值 RSS ~76MB、
+> 吞吐 ~4.95 万条目/秒。流式内存目标已超额达成。
+
 ### 功能指标
 
 | 功能 | 状态 | 目标 |
 |------|------|------|
-| 颜色支持 | ❌ | ✅ |
-| 进度显示 | ❌ | ✅ |
-| 排除模式 | ❌ | ✅ |
+| 颜色支持 | ✅ | ✅ |
+| 进度显示 | ✅ | ✅ |
+| 排除模式 | ✅ | ✅ |
 | 并行处理 | ❌ | ✅ |
-| 流式输出 | ❌ | ✅ |
+| 流式输出 | ✅ | ✅ |
 | 配置文件 | ❌ | ✅ |
 
 ### 质量指标
@@ -570,21 +573,20 @@ criterion_main!(benches);
 
 ### 需要修复的问题
 
-1. **拼写错误**
-   ```toml
-   # Cargo.toml
-   clap = { version = "4.5" }  # 应该是 clap
-   humansize = "2.1"      # 应该是 humansize
-   thiserror = "1.0"      # 应该是 thiserror
-   ```
+1. **已清理的依赖**
+   - 已移除未使用的 `anyhow`（库内一律用 `thiserror`）
+   - 已移除停维的 `atty`，改用标准库 `std::io::IsTerminal`
+   - 已移除 `increment_progress` / `abandon_progress` 的死调用：进度条现在真实
+     推进（节点计数 + 当前路径），内存路径与流式路径均生效
 
 2. **未使用的依赖**
-   - 检查并移除未使用的 crate
+   - 持续检查并移除未使用的 crate
    - 减少编译时间和二进制大小
 
 3. **代码重复**
    - 提取公共逻辑到工具模块
-   - 减少 formatters 之间的重复代码
+   - `collector.rs` 中 `get_all_files` / `get_all_directories` / `total_node_count`
+     几套近同构递归可统一为一个遍历迭代器
 
 ---
 
@@ -592,14 +594,15 @@ criterion_main!(benches);
 
 ### 新增依赖
 
-| 功能 | Crate | 版本 | 原因 |
-|------|-------|------|------|
-| 颜色 | colored | 2.0 | 简单易用的跨平台着色 |
-| 进度条 | indicatif | 0.17 | 功能丰富的进度显示 |
-| 并行 | rayon | 1.8 | 零所有权抽象的并行处理 |
-| 缓存 | lru | 0.8 | 高效 LRU 缓存实现 |
-| 模式匹配 | glob | 0.3 | glob 模式匹配 |
-| 配置 | dirs | 5.0 | 跨平台配置目录 |
+| 功能 | Crate | 版本 | 原因 | 状态 |
+|------|-------|------|------|------|
+| 颜色 | colored | 2.1 | 简单易用的跨平台着色 | 已采用 |
+| 进度条 | indicatif | 0.17 | 功能丰富的进度显示 | 已采用 |
+| 错误处理 | thiserror | 1.0 | 派生 Error 枚举 | 已采用 |
+| 模式匹配 | glob | 0.3 | glob 模式匹配 | 已采用 |
+| 并行 | rayon | 1.8 | 零所有权抽象的并行处理 | 未采用（破坏排序） |
+| 缓存 | lru | 0.8 | 高效 LRU 缓存实现 | 未采用 |
+| 配置 | dirs | 5.0 | 跨平台配置目录 | 未采用 |
 
 ---
 
@@ -611,15 +614,19 @@ criterion_main!(benches);
 # 基础用法
 rust-tree [OPTIONS] <PATH>
 
-# 新增选项
+# 已实现选项
 rust-tree --color=auto              # 颜色支持
 rust-tree --exclude "*.log"        # 排除模式
 rust-tree --include-only "*.rs"    # 包含模式
-rust-tree --parallel              # 并行处理
-rust-tree --progress               # 进度显示
-rust-tree --output-format md      # 输出格式
-rust-tree --config <path>         # 配置文件
-rust-tree --no-cache               # 禁用缓存
+rust-tree --progress                # 进度显示（真实计数 + 当前路径）
+rust-tree --streaming               # 流式模式（低内存）
+rust-tree --exclude-common rust     # 语言的常见排除模式
+
+# 规划中（尚未实现）
+rust-tree --parallel               # 并行处理（未实现）
+rust-tree -f md                     # Markdown 输出（未实现）
+rust-tree --config <path>          # 配置文件（未实现）
+rust-tree --no-cache               # 禁用缓存（未实现）
 ```
 
 ### 环境变量支持

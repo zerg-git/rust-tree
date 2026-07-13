@@ -33,8 +33,8 @@ pub fn create_progress_bar(config: &ProgressConfig) -> Option<ProgressBar> {
     let pb = ProgressBar::new_spinner();
     pb.set_style(
         ProgressStyle::default_spinner()
-            .template("{spinner:.green} {msg}")
-            .unwrap()
+            .template("{spinner:.green} {human_pos} scanned — {msg}")
+            .unwrap(),
     );
     pb.enable_steady_tick(Duration::from_millis(100));
 

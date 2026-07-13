@@ -21,17 +21,19 @@ pub mod core;
 pub mod formatters;
 
 // 重新导出常用类型
-pub use config::{Config, OutputFormat, SortBy, ColorMode, ColorScheme};
+pub use config::{ColorMode, ColorScheme, Config, OutputFormat, SortBy};
 pub use core::{
-    models::{FsNode, FsTree, FsNodeType, TreeStats, FileTypeInfo, FileEntry, TreeError},
-    walker::{walk_directory, WalkConfig, SortField},
-    collector::{collect_stats, get_all_files, get_all_directories},
+    collector::{collect_stats, get_all_directories, get_all_files},
+    models::{FileEntry, FileTypeInfo, FsNode, FsNodeType, FsTree, TreeError, TreeStats},
+    walker::{walk_directory, SortField, WalkConfig},
 };
-pub use formatters::{format_tree, format_json, format_table};
+pub use formatters::{format_json, format_table, format_tree};
 
+use crate::core::progress::{
+    create_progress_bar, finish_progress, update_progress, ProgressConfig,
+};
 use std::io::{self, Write};
 use std::time::Instant;
-use crate::core::progress::{create_progress_bar, finish_progress, update_progress, ProgressConfig};
 
 /// 使用给定配置运行 rust-tree 工具。
 ///
@@ -57,6 +59,9 @@ pub fn run(config: Config) -> Result<(), TreeError> {
         ));
     }
 
+    // 校验参数（如 --exclude-common 的未知语言）。
+    config.validate()?;
+
     // 检查是否启用了流式模式
     if config.streaming {
         return run_streaming(config);
@@ -72,7 +77,7 @@ pub fn run(config: Config) -> Result<(), TreeError> {
 
     // 遍历目录
     update_progress(&progress, &format!("Scanning: {}", config.path.display()));
-    let tree = walk_directory(&config.path, &config.to_walk_config())?;
+    let tree = walk_directory(&config.path, &config.to_walk_config(), progress.as_ref())?;
     finish_progress(&progress, "Scan complete");
 
     // 收集统计信息
@@ -97,17 +102,15 @@ pub fn run(config: Config) -> Result<(), TreeError> {
 
             result
         }
-        OutputFormat::Json => {
-            format_json(&tree, &stats, true)?
-        }
-        OutputFormat::Table => {
-            format_table(&stats)
-        }
+        OutputFormat::Json => format_json(&tree, &stats, true)?,
+        OutputFormat::Table => format_table(&stats),
     };
 
     // 打印输出
     print!("{}", output);
-    io::stdout().flush().map_err(|e| TreeError::Other(e.to_string()))?;
+    io::stdout()
+        .flush()
+        .map_err(|e| TreeError::Other(e.to_string()))?;
 
     Ok(())
 }
@@ -117,6 +120,14 @@ fn run_streaming(config: Config) -> Result<(), TreeError> {
     use crate::formatters::streaming_tree::format_tree_streaming;
 
     let walk_config = config.to_walk_config();
+
+    // 流式模式也支持 --progress：真实进度条在遍历回调里推进。
+    let progress_config = ProgressConfig {
+        enabled: config.show_progress,
+        ..Default::default()
+    };
+    let progress = create_progress_bar(&progress_config);
+    update_progress(&progress, &format!("Scanning: {}", config.path.display()));
 
     // 流式模式直接使用 stdout
     let mut stdout = io::stdout().lock();
@@ -128,9 +139,14 @@ fn run_streaming(config: Config) -> Result<(), TreeError> {
         config.color_mode,
         config.color_scheme,
         walk_config,
-    ).map_err(|e| TreeError::Other(e.to_string()))?;
+        progress.as_ref(),
+    )
+    .map_err(|e| TreeError::Other(e.to_string()))?;
 
-    io::stdout().flush().map_err(|e| TreeError::Other(e.to_string()))?;
+    finish_progress(&progress, "Scan complete");
+    io::stdout()
+        .flush()
+        .map_err(|e| TreeError::Other(e.to_string()))?;
 
     Ok(())
 }

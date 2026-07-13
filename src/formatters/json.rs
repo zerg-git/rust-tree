@@ -1,7 +1,7 @@
 //! JSON 输出格式化器。
 
+use crate::core::models::{FsTree, TreeError, TreeStats};
 use serde_json::json;
-use crate::core::models::{FsTree, TreeStats, TreeError};
 
 /// 将文件树及其统计信息格式化为 JSON。
 ///

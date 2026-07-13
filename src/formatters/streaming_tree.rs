@@ -1,11 +1,11 @@
 //! 用于内存高效输出的流式树格式化器。
 
-use std::io::Write;
+use crate::config::color::should_use_colors;
+use crate::config::{ColorMode, ColorScheme};
 use crate::core::streaming::{walk_core, StreamNode};
 use crate::core::walker::WalkConfig;
-use crate::config::{ColorMode, ColorScheme};
-use crate::config::color::should_use_colors;
 use humansize::format_size;
+use std::io::Write;
 
 /// 使用流式核心格式化树（峰值内存为 O(最宽目录的宽度)）。
 pub fn format_tree_streaming<W: Write>(
@@ -15,18 +15,24 @@ pub fn format_tree_streaming<W: Write>(
     color_mode: ColorMode,
     color_scheme: ColorScheme,
     config: WalkConfig,
+    progress: Option<&indicatif::ProgressBar>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let use_color = should_use_colors(color_mode);
 
     // 先输出根目录
-    let root_name = root.file_name()
+    let root_name = root
+        .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or(".")
         .to_string();
 
     let root_colored = if use_color {
-        colorize_by_type_and_ext(&root_name, &crate::core::models::FsNodeType::Directory, color_scheme)
-            .to_string()
+        colorize_by_type_and_ext(
+            &root_name,
+            &crate::core::models::FsNodeType::Directory,
+            color_scheme,
+        )
+        .to_string()
     } else {
         root_name.clone()
     };
@@ -46,6 +52,14 @@ pub fn format_tree_streaming<W: Write>(
         let prefix = build_prefix(&prefix_stack, node.depth);
         let label = build_label(node, show_size, use_color, color_scheme);
         let _ = writeln!(writer, "{}{}", prefix, label);
+
+        // 真实进度：每个节点计数加一，目录节点更新当前路径消息。
+        if let Some(pb) = progress {
+            pb.inc(1);
+            if node.node_type == crate::core::models::FsNodeType::Directory {
+                pb.set_message(node.path.display().to_string());
+            }
+        }
     })?;
 
     Ok(())
@@ -97,7 +111,10 @@ fn build_label(
 
     // 添加大小
     if show_size && node.node_type == crate::core::models::FsNodeType::File && node.size > 0 {
-        label.push_str(&format!(" ({})", format_size(node.size, humansize::DECIMAL)));
+        label.push_str(&format!(
+            " ({})",
+            format_size(node.size, humansize::DECIMAL)
+        ));
     }
 
     label
@@ -109,8 +126,8 @@ fn colorize_by_type_and_ext(
     node_type: &crate::core::models::FsNodeType,
     scheme: ColorScheme,
 ) -> colored::ColoredString {
-    use colored::Colorize;
     use crate::core::models::FsNodeType;
+    use colored::Colorize;
 
     match node_type {
         FsNodeType::Directory => name.blue().bold(),

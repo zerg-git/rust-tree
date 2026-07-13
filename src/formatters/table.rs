@@ -1,8 +1,10 @@
 //! 统计信息的表格输出格式化器。
 
-use comfy_table::{Table, Attribute, Color, Cell, presets::UTF8_FULL, modifiers::UTF8_ROUND_CORNERS};
-use humansize::format_size;
 use crate::core::models::TreeStats;
+use comfy_table::{
+    modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Attribute, Cell, Color, Table,
+};
+use humansize::format_size;
 
 /// 将统计信息格式化为表格。
 ///
@@ -40,11 +42,9 @@ fn format_overview(stats: &TreeStats) -> String {
     table
         .load_preset(UTF8_FULL)
         .apply_modifier(UTF8_ROUND_CORNERS)
-        .set_header(vec![
-            Cell::new("Statistics")
-                .add_attribute(Attribute::Bold)
-                .fg(Color::Cyan),
-        ]);
+        .set_header(vec![Cell::new("Statistics")
+            .add_attribute(Attribute::Bold)
+            .fg(Color::Cyan)]);
 
     table.add_row(vec![
         Cell::new("Total Files"),
@@ -139,7 +139,10 @@ fn format_largest_files_table(stats: &TreeStats) -> String {
 
     // 添加标题
     let mut output = String::new();
-    output.push_str(&format!("Largest Files (showing {})\n", stats.largest_files.len()));
+    output.push_str(&format!(
+        "Largest Files (showing {})\n",
+        stats.largest_files.len()
+    ));
     output.push_str(&table.to_string());
     output
 }

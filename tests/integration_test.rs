@@ -31,7 +31,7 @@ fn test_walk_directory() {
     let test_dir = create_test_dir();
     let config = rust_tree::core::walker::WalkConfig::default();
 
-    let result = rust_tree::core::walker::walk_directory(test_dir.path(), &config);
+    let result = rust_tree::core::walker::walk_directory(test_dir.path(), &config, None);
     assert!(result.is_ok());
 
     let tree = result.unwrap();
@@ -44,7 +44,7 @@ fn test_collect_stats() {
     let test_dir = create_test_dir();
     let config = rust_tree::core::walker::WalkConfig::default();
 
-    let tree = rust_tree::core::walker::walk_directory(test_dir.path(), &config).unwrap();
+    let tree = rust_tree::core::walker::walk_directory(test_dir.path(), &config, None).unwrap();
     let stats = rust_tree::core::collector::collect_stats(&tree, std::time::Instant::now(), 10);
 
     assert!(stats.total_files > 0);

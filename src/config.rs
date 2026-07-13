@@ -39,6 +39,11 @@ impl From<SortBy> for SortField {
     }
 }
 
+/// `--exclude-common` 受支持的语言集合。`validate` 用它做输入校验，
+/// `to_walk_config` 的 match 负责把语言映射到具体排除模式。
+pub const EXCLUDE_COMMON_LANGS: &[&str] =
+    &["rust", "node", "nodejs", "javascript", "python", "common"];
+
 /// rust-tree 的命令行参数。
 #[derive(Parser, Debug)]
 #[command(name = "rust-tree")]
@@ -128,6 +133,23 @@ pub struct Config {
 }
 
 impl Config {
+    /// 校验命令行参数的合法性。
+    ///
+    /// 目前校验 `--exclude-common` 是否为受支持的语言；未知语言在此报错，
+    /// 而非像 `to_walk_config` 那样静默跳过。
+    pub fn validate(&self) -> Result<(), crate::core::models::TreeError> {
+        if let Some(ref lang) = self.exclude_common {
+            if !EXCLUDE_COMMON_LANGS.contains(&lang.as_str()) {
+                return Err(crate::core::models::TreeError::Other(format!(
+                    "unknown --exclude-common language '{}'; supported: {}",
+                    lang,
+                    EXCLUDE_COMMON_LANGS.join(", ")
+                )));
+            }
+        }
+        Ok(())
+    }
+
     /// 转换为 WalkConfig，供 walker 模块使用。
     pub fn to_walk_config(&self) -> WalkConfig {
         use crate::core::filter::common_excludes;

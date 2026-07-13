@@ -95,16 +95,32 @@ pub mod common_excludes {
 
     /// Node.js 项目的常用排除模式。
     pub fn nodejs_patterns() -> Vec<&'static str> {
-        vec![".git", "node_modules", "package-lock.json", "yarn.lock", "*.log"]
+        vec![
+            ".git",
+            "node_modules",
+            "package-lock.json",
+            "yarn.lock",
+            "*.log",
+        ]
     }
 
     /// Python 项目的常用排除模式。
     pub fn python_patterns() -> Vec<&'static str> {
-        vec![".git", "__pycache__", "*.pyc", ".venv", "venv", "*.egg-info", ".pytest_cache"]
+        vec![
+            ".git",
+            "__pycache__",
+            "*.pyc",
+            ".venv",
+            "venv",
+            "*.egg-info",
+            ".pytest_cache",
+        ]
     }
 
     /// 通用开发的常用排除模式。
     pub fn common_patterns() -> Vec<&'static str> {
-        vec![".git", ".svn", ".hg", "*.log", "*.tmp", "*.bak", "*.swp", "*~"]
+        vec![
+            ".git", ".svn", ".hg", "*.log", "*.tmp", "*.bak", "*.swp", "*~",
+        ]
     }
 }

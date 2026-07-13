@@ -1,8 +1,8 @@
 //! 树形输出格式化器。
 
-use crate::core::models::FsNode;
-use crate::config::{ColorMode, ColorScheme};
 use crate::config::color::{colorize_node, should_use_colors};
+use crate::config::{ColorMode, ColorScheme};
+use crate::core::models::FsNode;
 use humansize::format_size;
 
 /// 使用 Unicode 制表符将文件树格式化为树形结构。
@@ -17,7 +17,12 @@ use humansize::format_size;
 /// # 返回
 ///
 /// 表示树形结构的格式化字符串。
-pub fn format_tree(node: &FsNode, show_size: bool, color_mode: ColorMode, color_scheme: ColorScheme) -> String {
+pub fn format_tree(
+    node: &FsNode,
+    show_size: bool,
+    color_mode: ColorMode,
+    color_scheme: ColorScheme,
+) -> String {
     let mut output = String::new();
 
     // 打印根目录并着色

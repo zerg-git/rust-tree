@@ -18,7 +18,7 @@ fn test_walk_directory_builds_tree() {
     std::fs::write(temp.path().join("sub/inner.txt"), b"hi").unwrap();
     std::fs::write(temp.path().join("top.txt"), b"hello").unwrap();
 
-    let tree = walk_directory(temp.path(), &WalkConfig::default()).unwrap();
+    let tree = walk_directory(temp.path(), &WalkConfig::default(), None).unwrap();
 
     let children = tree.root.children.as_ref().unwrap();
     // 目录在前，文件在后。
@@ -41,7 +41,7 @@ fn test_walk_directory_max_depth() {
         max_depth: 1,
         ..Default::default()
     };
-    let tree = walk_directory(temp.path(), &config).unwrap();
+    let tree = walk_directory(temp.path(), &config, None).unwrap();
     let sub = tree
         .root
         .children
@@ -57,7 +57,7 @@ fn test_walk_directory_max_depth() {
 #[test]
 fn test_walk_directory_empty() {
     let temp = TempDir::new().unwrap();
-    let tree = walk_directory(temp.path(), &WalkConfig::default()).unwrap();
+    let tree = walk_directory(temp.path(), &WalkConfig::default(), None).unwrap();
     assert!(tree.root.children.is_none());
     assert_eq!(tree.max_depth, 0);
 }

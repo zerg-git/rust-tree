@@ -63,7 +63,11 @@ impl Default for WalkConfig {
 /// # 错误
 ///
 /// 如果路径不存在、不是目录，或在根节点上权限被拒绝，则返回 `TreeError`。
-pub fn walk_directory(path: &Path, config: &WalkConfig) -> Result<FsTree, TreeError> {
+pub fn walk_directory(
+    path: &Path,
+    config: &WalkConfig,
+    progress: Option<&indicatif::ProgressBar>,
+) -> Result<FsTree, TreeError> {
     if !path.exists() {
         return Err(TreeError::PathNotFound(path.to_path_buf()));
     }
@@ -121,6 +125,14 @@ pub fn walk_directory(path: &Path, config: &WalkConfig) -> Result<FsTree, TreeEr
                 if let Some(parent) = stack.last_mut() {
                     parent.children.get_or_insert_with(Vec::new).push(leaf);
                 }
+            }
+        }
+
+        // 真实进度：每个节点计数加一，目录节点更新当前路径消息。
+        if let Some(pb) = progress {
+            pb.inc(1);
+            if node.node_type == FsNodeType::Directory {
+                pb.set_message(node.path.display().to_string());
             }
         }
     })?;
