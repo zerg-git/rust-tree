@@ -80,8 +80,15 @@ pub fn run(config: Config) -> Result<(), TreeError> {
     let tree = walk_directory(&config.path, &config.to_walk_config(), progress.as_ref())?;
     finish_progress(&progress, "Scan complete");
 
-    // 收集统计信息
-    let stats = collect_stats(&tree, start_time, config.top_files_count());
+    // 收集统计信息：仅当统计会被使用时（-S、-f json、-f table）才收集。
+    // 默认 tree 视图无 -s/-S 时统计结果会被丢弃，跳过可省去一次全树遍历；
+    // 且此时 need_size=false 已使文件 size 为 0，即便收集也是零值。
+    // scan_duration 仅在统计块中展示，跳过时也无需计算。
+    let stats = if config.should_show_stats() {
+        collect_stats(&tree, start_time, config.top_files_count())
+    } else {
+        crate::core::models::TreeStats::new()
+    };
 
     // 根据所选格式格式化输出
     let output = match config.format {

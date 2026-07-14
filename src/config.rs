@@ -195,6 +195,21 @@ impl Config {
             }
         }
 
+        // 是否真正需要文件的字节大小：
+        // - 显示 size（-s）时需要；
+        // - 统计信息（-S / -f json / -f table）会用到 total_size / largest_files；
+        // - 按 size 排序的需求由 walk_children 内部 OR `sort_by == Size` 兜底，
+        //   无需在此置位。
+        //
+        // 关键优化：默认 `rust-tree`（无 -s / -S）既不显示 size 也不打印统计，
+        // 此时 collect_stats 的结果会被丢弃——历史上内存路径无条件 need_size
+        // 会让每个文件白做一次 stat（大目录下 ~19s 全是内核态 syscall）。
+        // 改为按需后，默认调用与 streaming 默认路径持平。
+        //
+        // streaming 分支 should_show_stats() 恒为 false（该组合在 run() 中已被
+        // 拒绝），故本公式对两种路径统一成立。
+        let need_size = self.show_size || self.should_show_stats();
+
         WalkConfig {
             max_depth: self.max_depth,
             show_hidden: self.show_hidden,
@@ -202,10 +217,7 @@ impl Config {
             sort_by: self.sort_by.into(),
             reverse: self.reverse,
             filter,
-            // 流式路径仅在显示 size 时需要 stat；按 size 排序的需求由
-            // walk_children 内部 OR `sort_by == Size` 兜底。内存路径无条件
-            // 需要 size（collect_stats 始终要 total_size / largest_files）。
-            need_size: if self.streaming { self.show_size } else { true },
+            need_size,
         }
     }
 
